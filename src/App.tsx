@@ -44,7 +44,7 @@ const dict: Record<string, any> = {
     analyzingBtn: "Analizowanie historii...",
     foundMatches: "Znaleźliśmy Wasze ścieżki!",
     noMatches: "😔 Niestety, brak przecięć.",
-    distance: "Byliście od siebie o",
+    distance: "Odległość",
     showMore: "Pokaż więcej spotkań",
     aiShortBtn: "Gdzie to było? (Szybko)",
     aiLocating: "Lokalizowanie miejsca...",
@@ -111,7 +111,7 @@ const dict: Record<string, any> = {
     analyzingBtn: "Analyzing history...",
     foundMatches: "We found your crossed paths!",
     noMatches: "😔 Unfortunately, no intersections found.",
-    distance: "You were apart by",
+    distance: "Distance",
     showMore: "Show more meetings",
     aiShortBtn: "Where was this? (Quick)",
     aiLocating: "Locating place in time and space...",
@@ -252,7 +252,45 @@ const normalizeData = (data: any): any[] => {
 };
 
 // ============================================================================
-// KOMPONENT MAPY
+// KOMPONENT MINI-MAPY (używany w kartach i eksporcie)
+// ============================================================================
+const MiniMap = ({ lat, lon }: { lat: number, lon: number }) => {
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  
+  useEffect(() => {
+    const checkL = setInterval(() => {
+      if ((window as any).L && mapRef.current) {
+        clearInterval(checkL);
+        const win = window as any;
+        const map = win.L.map(mapRef.current, {
+          center: [lat, lon],
+          zoom: 15,
+          zoomControl: false,
+          dragging: false,
+          touchZoom: false,
+          scrollWheelZoom: false,
+          doubleClickZoom: false,
+          attributionControl: false
+        });
+        win.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        win.L.marker([lat, lon]).addTo(map);
+        
+        // Zapewnij, że mapa jest poprawnie narysowana
+        setTimeout(() => map.invalidateSize(), 200);
+      }
+    }, 100);
+    return () => clearInterval(checkL);
+  }, [lat, lon]);
+
+  return (
+    <div className="w-full h-48 sm:h-56 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 relative z-0 export-map-frame">
+      <div ref={mapRef} className="w-full h-full bg-gray-100 dark:bg-gray-800" />
+    </div>
+  );
+};
+
+// ============================================================================
+// KOMPONENT MAPY GŁÓWNEJ
 // ============================================================================
 const MapView = ({ matches }: { matches: any[] }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -292,7 +330,7 @@ const MapView = ({ matches }: { matches: any[] }) => {
 
   if (!matches || matches.length === 0) return null;
   return (
-    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm relative z-0">
+    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm relative z-0 hide-on-export">
       <div ref={mapRef} className="w-full h-[400px] bg-gray-50 dark:bg-gray-800" />
     </div>
   );
@@ -350,15 +388,19 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       ? "Napisz maksymalnie 2 krótkie zdania podsumowania po polsku, gdzie się minęli na podstawie tych współrzędnych."
       : "Write max 2 short sentences in English summarizing where they crossed paths based on these coordinates.";
       
-    // ZRESTYKCYJNY PROMPT DLA WIĘKSZEJ PRECYZJI
+    // ZRESTYKCYJNY PROMPT DLA WIĘKSZEJ PRECYZJI I LOKALIZACJI TYPU AIRPORT / PARK
     const prompt = `Data: ${dateStr}, Godzina: ${timeStr}. Lat: ${match.lat}, Lon: ${match.lon}. Dystans: ${match.distance}m. 
-    WAŻNE: Działasz jako super precyzyjny geolokator. Zidentyfikuj DOKŁADNE miejsce pod tymi współrzędnymi GPS. Jeśli to zwykła ulica, podaj jej nazwę. NIE UŻYWAJ i nie "przyklejaj" tego punktu do nazw pobliskich dużych obiektów (np. galerii handlowych jak Wroclavia, stadionów, rynków), chyba że współrzędne znajdują się BEZPOŚREDNIO wewnątrz tych obiektów.
-    ${promptParams} Bądź zwięzły i zaintryguj ich podając najdokładniejszą lokalizację.`;
+    WAŻNE: Jesteś asystentem podróży. Zidentyfikuj DOKŁADNY charakter miejsca. 
+    1. Jeśli punkt jest blisko lotniska (np. Chopina, Balice), skup się na podróżach, samolotach, wspólnym locie lub pożegnaniach. 
+    2. Jeśli to park, ogród, rynek - pisz o klimacie tego miejsca. 
+    3. Drogi szybkiego ruchu (np. S79, A4) wymieniaj TYLKO jeśli punkt jest na odludziu, w środku trasy. Jeśli obok drogi jest lotnisko - priorytetem jest lotnisko!
+    4. Nigdy nie zmyślaj nazw sklepów, jeśli nie masz 100% pewności.
+    ${promptParams} Bądź zwięzły i klimatyczny.`;
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
-      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Respond in requested language." }] }
+      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Bezwzględnie odróżniasz klimat miejsc (lotnisko, park, klub) od samej technicznej infrastruktury drogowej." }] }
     };
 
     try {
@@ -378,10 +420,10 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const generateLongStory = async () => {
     setIsLoadingLong(true);
     let promptParams = lang === 'pl' 
-      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki."
+      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki, lekko tajemniczy."
       : "Write 4-5 sentences of an intriguing, romantic story in English about how they might have passed each other here.";
 
-    const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło (Trzymaj się DOKŁADNIE tej lokalizacji, nie wspominaj o pobliskich większych budynkach): ${shortStory}.`;
+    const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło (Trzymaj się DOKŁADNIE tej lokalizacji i charakteru miejsca): ${shortStory}.`;
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
@@ -404,7 +446,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   return (
-    <div className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-5 relative z-10 w-full">
+    <div className="mt-5 pt-5 relative z-10 w-full border-t border-gray-100 dark:border-gray-800 ai-section-export">
       {!shortStory && !isLoadingShort && (
         <button onClick={generateShortStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full transition-colors border border-indigo-200 dark:border-indigo-800/50 font-medium w-full sm:w-auto justify-center group hide-on-export">
           <Sparkles size={16} className="text-indigo-500 group-hover:animate-spin" />
@@ -485,11 +527,19 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
     
     setIsDownloading(true);
     try {
+      // Dodajemy klasę, która narzuca sztywne wymiary (540x960) pod idealne proporcje 9:16
       element.classList.add('exporting-card');
+      
+      // Delikatne opóźnienie dla przeglądarki na przemalowanie układu do nowych proporcji
+      await new Promise(r => setTimeout(r, 200)); 
+
       const canvas = await win.html2canvas(element, { 
-        backgroundColor: '#1e1b4b', 
-        scale: 3, 
-        useCORS: true
+        backgroundColor: null, // Używamy naszego gradientu z CSS
+        scale: 3, // Bardzo wysoka rozdzielczość na social media
+        useCORS: true,
+        windowWidth: 540,
+        width: 540,
+        height: 960 // Sztywne wymiary IG Story
       });
       element.classList.remove('exporting-card');
       
@@ -502,8 +552,7 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
         const file = new File([blob], fileName, { type: 'image/png' });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          // TIP: Samo przesłanie pliku (bez text i title) wymusza w wielu smartfonach (szczególnie iOS)
-          // wywołanie opcji graficznych udostępniania, gdzie Instagram Story / Snapchat grają pierwsze skrzypce!
+          // TIP: Wysyłając TYLKO plik, wymuszamy na mobilkach UI wyboru aplikacji zdjęciowych (IG, Snapchat)
           await navigator.share({
             files: [file]
           });
@@ -511,7 +560,7 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
           throw new Error("Web Share API not supported");
         }
       } catch (shareErr) {
-        // Fallback dla komputerów stacjonarnych lub w przypadku przerwania okna dialogowego
+        // Fallback dla desktopu
         const link = document.createElement('a');
         link.download = fileName;
         link.href = image;
@@ -526,27 +575,38 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
   };
 
   return (
-    <div id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group overflow-hidden w-full">
+    <div id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all group overflow-hidden w-full export-container-reset">
+      
+      {/* NAGŁÓWEK TYLKO DLA EKSPORTU */}
+      <div className="hidden export-header">
+        NASZE PIERWSZE SPOTKANIE
+      </div>
+
       {/* Znak wodny, ukryty normalnie, widoczny TYLKO na obrazku udostępnionym na Insta */}
-      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hidden watermark-only"></div>
+      <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hidden watermark-only"></div>
       <div className="absolute bottom-10 left-0 right-0 text-center hidden watermark-only">
-         <span className="text-white/80 font-black tracking-[0.4em] text-sm drop-shadow-lg">📍 HAVEWEMET.APP</span>
+         <span className="text-white/60 font-black tracking-[0.4em] text-xs drop-shadow-md uppercase">havewemet.app</span>
       </div>
 
       {/* Kontener nagłówka wymuszający bezpieczny Flexbox przy renderowaniu Canvas */}
-      <div className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10 w-full">
-        <div className="flex flex-col flex-1 shrink-0">
-          <div className="text-2xl font-black text-rose-500 tracking-tight mb-1">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
-          <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2">
+      <div className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10 w-full export-row">
+        <div className="flex flex-col flex-1 min-w-0 export-date-block">
+          <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 truncate date-text">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
+          <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2 time-text">
             <span>{date.toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' })}</span>
           </div>
         </div>
-        {/* Pigułka z odległością. Użyto align-items i shrink-0 dla powstrzymania zgniatania w html2canvas */}
-        <div className="flex justify-end items-center shrink-0 pl-4">
-          <div className="text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-indigo-100 dark:border-indigo-800/50 whitespace-nowrap">
-             <MapPin size={16} className="shrink-0"/> {t.distance}: {match.distance} m
+        {/* Pigułka z odległością - shrink-0 zabrania zgniatania napisu */}
+        <div className="flex justify-end items-center shrink-0 pl-4 export-distance-block">
+          <div className="distance-badge text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-indigo-100 dark:border-indigo-800/50 whitespace-nowrap">
+             <MapPin size={16} className="shrink-0 distance-icon"/> {t.distance}: {match.distance} m
           </div>
         </div>
+      </div>
+
+      {/* MINI MAPA - Daje autentyczność */}
+      <div className="relative z-10 w-full export-map-container">
+        <MiniMap lat={match.lat} lon={match.lon} />
       </div>
       
       <GeminiStory match={match} lang={lang} t={t} />
@@ -842,8 +902,8 @@ export default function App() {
                   <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
                     <CircleCheck className="text-emerald-600 dark:text-emerald-400 w-10 h-10" />
                   </div>
-                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.readyHost}</h3>
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">{t.readyPts.replace('{n}', fileA.length.toLocaleString('pl-PL'))}</p>
+                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">Pomyślnie dodano!</h3>
+                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">Zabezpieczono {fileA.length.toLocaleString('pl-PL')} punktów.</p>
                   
                   <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-emerald-50 dark:border-emerald-900/30">
                     {peerStatus === 'connected' && !results ? (
@@ -884,30 +944,41 @@ export default function App() {
                   {results.length > 0 ? <><Sparkles className="text-rose-500"/> {t.foundMatches}</> : t.noMatches}
                 </h2>
                 <div className="space-y-6">
-                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD */}
+                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD (Spotify Wrapped Style) */}
                   <style>{`
                     .exporting-card .hide-on-export { display: none !important; }
                     .exporting-card .watermark-only { display: block !important; }
                     .exporting-card {
-                      background: linear-gradient(150deg, #1e1b4b 0%, #312e81 40%, #701a75 100%) !important;
+                      width: 540px !important;
+                      height: 960px !important;
+                      background: radial-gradient(circle at 10% 20%, #1e1b4b 0%, #0f172a 100%) !important;
                       color: #f8fafc !important;
                       border-radius: 40px !important;
-                      padding: 80px 50px 140px 50px !important;
+                      padding: 60px 40px !important;
                       border: none !important;
                       box-shadow: none !important;
                       display: flex !important;
                       flex-direction: column !important;
                       justify-content: center !important;
-                      min-height: 850px !important;
+                      align-items: center !important;
+                      text-align: center !important;
+                      box-sizing: border-box !important;
                     }
-                    .exporting-card .text-rose-500 { color: #fb7185 !important; }
-                    .exporting-card .text-indigo-500, .exporting-card .text-indigo-600, .exporting-card .text-indigo-700 { color: #c7d2fe !important; }
-                    .exporting-card .text-gray-500, .exporting-card .text-gray-600, .exporting-card .text-gray-700, .exporting-card .text-gray-800 { color: #e2e8f0 !important; }
-                    .exporting-card .border-gray-100, .exporting-card .border-b, .exporting-card .border-indigo-100, .exporting-card .border-indigo-200 { border-color: rgba(255,255,255,0.15) !important; }
-                    .exporting-card .bg-indigo-50, .exporting-card .bg-gray-50, .exporting-card .bg-white { background: rgba(255,255,255,0.1) !important; border: 1px solid rgba(255,255,255,0.2) !important; backdrop-filter: blur(10px); }
-                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 40px !important; margin-top: 40px !important; }
-                    .exporting-card .icon-sparkle-bg { opacity: 0.2 !important; color: #fff !important; }
-                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 15px !important; padding-top: 0 !important; }
+                    .exporting-card .export-container-reset { padding: 0 !important; margin: 0 !important; width: 100% !important; background: transparent !important; border: none !important; }
+                    .exporting-card .export-header { display: block !important; font-size: 1.1rem !important; font-weight: 900 !important; color: #f472b6 !important; letter-spacing: 0.3em !important; text-transform: uppercase !important; margin-bottom: 40px !important; }
+                    .exporting-card .export-row { flex-direction: column !important; align-items: center !important; border: none !important; margin-bottom: 30px !important; }
+                    .exporting-card .export-date-block { align-items: center !important; margin-bottom: 15px !important; }
+                    .exporting-card .date-text { font-size: 3.8rem !important; line-height: 1 !important; margin-bottom: 5px !important; color: #fff !important; font-weight: 900 !important; }
+                    .exporting-card .time-text { font-size: 1.4rem !important; color: #94a3b8 !important; justify-content: center !important; }
+                    .exporting-card .export-distance-block { padding: 0 !important; margin-top: 5px !important; width: 100% !important; display: flex !important; justify-content: center !important; }
+                    .exporting-card .distance-badge { background: rgba(244, 114, 182, 0.15) !important; border-color: rgba(244, 114, 182, 0.3) !important; color: #f472b6 !important; font-size: 1.2rem !important; padding: 10px 24px !important; border-radius: 999px !important; font-weight: 800 !important; width: fit-content !important; }
+                    .exporting-card .export-map-container { width: 100% !important; margin: 30px 0 !important; }
+                    .exporting-card .export-map-frame { height: 260px !important; border: 2px solid rgba(255,255,255,0.1) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important; }
+                    .exporting-card .ai-section-export { border: none !important; width: 100% !important; margin-top: 10px !important; padding-top: 0 !important; }
+                    .exporting-card .story-content-container { background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
+                    .exporting-card .ai-title { display: none !important; }
+                    .exporting-card .ai-text { font-size: 1.3rem !important; line-height: 1.5 !important; color: #e2e8f0 !important; font-style: italic !important; text-align: center !important; font-weight: 500 !important; max-width: 400px !important; }
+                    .exporting-card .icon-sparkle-bg { display: none !important; }
                   `}</style>
                   
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
@@ -1022,14 +1093,14 @@ export default function App() {
                     <div className="bg-rose-50 dark:bg-rose-900/30 w-20 h-20 rounded-full flex items-center justify-center mb-6"><QrCode className="w-10 h-10 text-rose-500 dark:text-rose-400" /></div>
                     <h3 className="font-bold text-2xl mb-6">{t.guestTitle}</h3>
                     <button onClick={startHosting} className={`mb-6 w-full max-w-[280px] py-3.5 px-6 rounded-full font-bold text-base shadow-md transition-all flex items-center justify-center gap-2 ${fileA ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:scale-105 active:scale-95' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border border-gray-200 dark:border-gray-700'}`}>
-                      <Smartphone size={18} /> {t.openScanner}
+                      <Smartphone size={18} /> Otwórz skaner QR
                     </button>
                     <div className="flex w-full max-w-[280px] gap-2 mb-6">
                         <input type="text" value={manualJoinCode} onChange={(e) => setManualJoinCode(e.target.value.toUpperCase())} placeholder={t.pinPlaceholder} className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full px-5 py-3 text-sm uppercase placeholder:normal-case font-mono font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" maxLength={8} />
                         <button onClick={handleManualJoin} disabled={!manualJoinCode.trim()} className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-3 rounded-full text-sm font-bold shadow-sm"><ArrowRight size={18} /></button>
                     </div>
                     <div className="relative flex items-center py-2 w-full max-w-[280px] opacity-60">
-                      <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div><span className="flex-shrink-0 mx-4 text-xs font-bold uppercase tracking-widest">{t.orTraditionally}</span><div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
+                      <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div><span className="flex-shrink-0 mx-4 text-xs font-bold uppercase tracking-widest">Lub tradycyjnie</span><div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
                     </div>
                     <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileB, setErrorB)} className="text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-gray-100 dark:file:bg-gray-800 file:text-gray-700 dark:file:text-gray-300 hover:file:bg-gray-200 w-full max-w-[280px] mt-4 cursor-pointer text-gray-500 transition-all" />
                     {errorB && (<div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl text-xs text-red-700 flex items-start gap-2 max-w-[280px] text-left"><TriangleAlert size={16} className="shrink-0 text-red-500" /><span>{errorB}</span></div>)}
@@ -1104,32 +1175,6 @@ export default function App() {
                 
                 {/* PAGINACJA WYNIKÓW I KARTY */}
                 <div className="space-y-6 relative z-10">
-                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD */}
-                  <style>{`
-                    .exporting-card .hide-on-export { display: none !important; }
-                    .exporting-card .watermark-only { display: block !important; }
-                    .exporting-card {
-                      background: linear-gradient(150deg, #1e1b4b 0%, #312e81 40%, #701a75 100%) !important;
-                      color: #f8fafc !important;
-                      border-radius: 40px !important;
-                      padding: 80px 50px 140px 50px !important;
-                      border: none !important;
-                      box-shadow: none !important;
-                      display: flex !important;
-                      flex-direction: column !important;
-                      justify-content: center !important;
-                      min-height: 850px !important;
-                    }
-                    .exporting-card .text-rose-500 { color: #fb7185 !important; }
-                    .exporting-card .text-indigo-500, .exporting-card .text-indigo-600, .exporting-card .text-indigo-700 { color: #c7d2fe !important; }
-                    .exporting-card .text-gray-500, .exporting-card .text-gray-600, .exporting-card .text-gray-700, .exporting-card .text-gray-800 { color: #e2e8f0 !important; }
-                    .exporting-card .border-gray-100, .exporting-card .border-b, .exporting-card .border-indigo-100, .exporting-card .border-indigo-200 { border-color: rgba(255,255,255,0.15) !important; }
-                    .exporting-card .bg-indigo-50, .exporting-card .bg-gray-50, .exporting-card .bg-white { background: rgba(255,255,255,0.1) !important; border: 1px solid rgba(255,255,255,0.2) !important; backdrop-filter: blur(10px); }
-                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 40px !important; margin-top: 40px !important; }
-                    .exporting-card .icon-sparkle-bg { opacity: 0.2 !important; color: #fff !important; }
-                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 15px !important; padding-top: 0 !important; }
-                  `}</style>
-                  
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     return <MatchCard key={i} match={match} lang={lang} t={t} />;
                   })}

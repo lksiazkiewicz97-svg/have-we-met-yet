@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Download } from 'lucide-react';
 
+// Deklaracja globalnych zmiennych i rozszerzenie typu ImportMeta dla Vite
+declare global {
+  interface Window { L: any; Peer: any; tailwind: any; html2canvas: any; }
+  interface ImportMeta {
+    env: Record<string, string | undefined>;
+  }
+}
+
 // ============================================================================
 // SŁOWNIK JĘZYKÓW (i18n)
 // ============================================================================
@@ -306,8 +314,9 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   // Bezpieczny odczyt z usuwaniem białych znaków (np. spacji) na wypadek błędnego skopiowania
   const getApiKey = () => {
     try {
-      const meta = import.meta as any;
-      return (meta.env?.VITE_GEMINI_API_KEY || "").trim();
+      // Wymagany przez Vite dosłowny ciąg: import.meta.env.VITE_GEMINI_API_KEY
+      const rawApiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : "";
+      return (rawApiKey || "").trim();
     } catch {
       return "";
     }
@@ -352,7 +361,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
-      tools: [{ googleSearch: {} }], // Prawidłowa nazwa narzędzia dla oficjalnego API Google
+      tools: [{ googleSearch: {} }],
       systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie fakty geograficzne. Respond in requested language." }] }
     };
 
@@ -507,8 +516,8 @@ export default function App() {
   const [lang, setLang] = useState<string>('pl');
   const [theme, setTheme] = useState<string>('light');
   const t = dict[lang];
-
-  // Silne typowanie stanów Reacta naprawia błędy TypeScript
+  
+// Silne typowanie stanów Reacta naprawia błędy TypeScript
   const [fileA, setFileA] = useState<any[] | null>(null);
   const [fileB, setFileB] = useState<any[] | null>(null);
   const [errorA, setErrorA] = useState<string | null>(null);
@@ -826,7 +835,7 @@ export default function App() {
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
-                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group">
                         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4">
                           <div>
                             <div className="text-xl font-extrabold text-rose-500">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>

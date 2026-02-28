@@ -210,9 +210,7 @@ const normalizeData = (data: any): any[] => {
     let lat = latRaw > 1000 || latRaw < -1000 ? latRaw / 1e7 : parseFloat(latRaw);
     let lon = lonRaw > 1000 || lonRaw < -1000 ? lonRaw / 1e7 : parseFloat(lonRaw);
     let time = typeof timeRaw === 'string' ? (/^\d+$/.test(timeRaw) ? parseInt(timeRaw, 10) : new Date(timeRaw).getTime()) : parseInt(timeRaw, 10);
-    if (!isNaN(lat) && !isNaN(lon) && time && !isNaN(time)) {
-      normalized.push({ time, lat, lon });
-    }
+    if (!isNaN(lat) && !isNaN(lon) && time && !isNaN(time)) normalized.push({ time, lat, lon });
   };
 
   if (data && data.locations && Array.isArray(data.locations)) {
@@ -261,20 +259,19 @@ const MapView = ({ matches }: { matches: any[] }) => {
       const script = document.createElement('script'); script.id = 'leaflet-js'; script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.async = true; document.head.appendChild(script);
     }
     const checkL = setInterval(() => {
-      const win = window as any;
-      if (win.L && mapRef.current) {
+      if ((window as any).L && mapRef.current) {
         clearInterval(checkL);
-        win.L.Icon.Default.imagePath = 'https://unpkg.com/leaflet@1.9.4/dist/images/';
+        (window as any).L.Icon.Default.imagePath = 'https://unpkg.com/leaflet@1.9.4/dist/images/';
         if (!mapInstance.current) {
-          mapInstance.current = win.L.map(mapRef.current);
-          win.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapInstance.current);
+          mapInstance.current = (window as any).L.map(mapRef.current);
+          (window as any).L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapInstance.current);
         }
-        mapInstance.current?.eachLayer((layer: any) => { if (layer instanceof win.L.Marker) mapInstance.current?.removeLayer(layer); });
+        mapInstance.current.eachLayer((layer: any) => { if (layer instanceof (window as any).L.Marker) mapInstance.current.removeLayer(layer); });
         if (matches && matches.length > 0) {
-          const bounds = win.L.latLngBounds();
+          const bounds = (window as any).L.latLngBounds();
           matches.forEach((m: any) => {
             const date = new Date(m.time);
-            win.L.marker([m.lat, m.lon]).addTo(mapInstance.current).bindPopup(`<div style="font-family: ui-sans-serif, system-ui, sans-serif; padding: 4px;"><div style="color: #e11d48; font-weight: 700; font-size: 14px; margin-bottom: 4px;">📍 Point</div><div style="color: #4b5563; font-size: 12px;">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div><div style="color: #111827; font-size: 13px; font-weight: 500; margin-top: 4px;">Dist: ${m.distance}m</div></div>`);
+            (window as any).L.marker([m.lat, m.lon]).addTo(mapInstance.current).bindPopup(`<div style="font-family: ui-sans-serif, system-ui, sans-serif; padding: 4px;"><div style="color: #e11d48; font-weight: 700; font-size: 14px; margin-bottom: 4px;">📍 Point</div><div style="color: #4b5563; font-size: 12px;">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div><div style="color: #111827; font-size: 13px; font-weight: 500; margin-top: 4px;">Dist: ${m.distance}m</div></div>`);
             bounds.extend([m.lat, m.lon]);
           });
           if (matches.length === 1) mapInstance.current?.setView([matches[0].lat, matches[0].lon], 16);
@@ -306,7 +303,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  // Bezpieczny dostęp do zmiennych środowiskowych Vite/Cloudflare
+  // Bezpieczny dostęp do zmiennych środowiskowych Vite/Cloudflare (naprawa TS & warningów)
   const getApiKey = () => {
     try {
       const meta = import.meta as any;
@@ -386,15 +383,14 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   const handleShare = async () => {
-    const win = window as any;
-    if (!win.html2canvas) return;
+    if (!(window as any).html2canvas) return;
     const element = document.getElementById(`story-card-${match.time}`);
     if (!element) return;
     
     setIsDownloading(true);
     try {
       element.classList.add('exporting-card');
-      const canvas = await win.html2canvas(element, { 
+      const canvas = await (window as any).html2canvas(element, { 
         backgroundColor: null, 
         scale: 3, 
         useCORS: true
@@ -439,7 +435,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
           <div className="flex items-center gap-2 mb-3 text-indigo-800 dark:text-indigo-300 font-bold text-sm relative z-10">
             <MapPin size={16} className="text-indigo-600 dark:text-indigo-400" /> {t.aiMapPoint}
           </div>
-          <p className="text-sm text-gray-800 dark:text-gray-200 font-medium leading-relaxed relative z-10">{shortStory}</p>
+          <p className="text-sm text-gray-800 dark:text-gray-200 font-medium line-relaxed relative z-10">{shortStory}</p>
           
           {!longStory && !isLoadingLong && (
              <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10 hide-on-export">
@@ -495,7 +491,7 @@ export default function App() {
   const [theme, setTheme] = useState<string>('light');
   const t = dict[lang];
 
-  // ZMIANA: Silne typowanie stanów Reacta naprawia błędy TypeScript
+  // Silne typowanie stanów Reacta naprawia błędy TypeScript (Never type fix)
   const [fileA, setFileA] = useState<any[] | null>(null);
   const [fileB, setFileB] = useState<any[] | null>(null);
   const [errorA, setErrorA] = useState<string | null>(null);
@@ -533,7 +529,6 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    const win = window as any;
     if (!document.getElementById('tailwind-config')) {
       const configScript = document.createElement('script');
       configScript.id = 'tailwind-config';
@@ -596,8 +591,7 @@ export default function App() {
 
   const loadPeerJSScript = (): Promise<void> => {
     return new Promise<void>((resolve) => {
-      const win = window as any;
-      if (win.Peer) return resolve();
+      if ((window as any).Peer) return resolve();
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
       script.onload = () => resolve();
@@ -609,8 +603,7 @@ export default function App() {
     await loadPeerJSScript();
     return new Promise<string>((resolve, reject) => {
       const idToUse = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const win = window as any;
-      const peer = new win.Peer(idToUse, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
+      const peer = new (window as any).Peer(idToUse, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
       peer.on('open', (id: string) => { peerInstance.current = peer; resolve(id); });
       peer.on('error', (err: any) => { setPeerStatus('offline'); setPeerError(err.type); reject(err); });
     });
@@ -655,7 +648,6 @@ export default function App() {
     setPeerStatus('offline'); setJoinLink(''); setPeerId(''); setPeerConnection(null); setFileB(null);
   };
 
-  // ZMIANA: Dodano typy parametrów handlera
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setFileFn: React.Dispatch<React.SetStateAction<any[] | null>>, setErrorFn: React.Dispatch<React.SetStateAction<string | null>>) => {
     setErrorFn(null);
     const target = e.target as HTMLInputElement;
@@ -696,7 +688,6 @@ export default function App() {
     document.body.removeChild(textArea);
   };
 
-  // ZMIANA: Dodano typy parametrów funkcji
   const generateFakePartner = (sourceData: any[], setTargetFn: React.Dispatch<React.SetStateAction<any[] | null>>) => {
     if (!sourceData || sourceData.length === 0) return;
     const basePt = sourceData[Math.floor(sourceData.length * Math.random())];
@@ -747,6 +738,7 @@ export default function App() {
                 <HeartHandshake size={36} className="text-rose-500" /> {t.guestModeTitle}
               </h1>
               <p className="text-gray-500 dark:text-gray-400 text-lg">{t.guestModeDesc}</p>
+              
               <button onClick={() => setShowInstructions(true)} className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-full text-sm font-bold shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:scale-105 active:scale-95">
                 <CircleHelp size={18} className="text-indigo-500" /> {t.howToData}
               </button>
@@ -768,8 +760,9 @@ export default function App() {
                   <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
                     <CircleCheck className="text-emerald-600 dark:text-emerald-400 w-10 h-10" />
                   </div>
-                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">Jesteś gotowy!</h3>
+                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">Pomyślnie dodano!</h3>
                   <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">Zabezpieczono {fileA.length.toLocaleString('pl-PL')} punktów.</p>
+                  
                   <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-emerald-50 dark:border-emerald-900/30">
                     {peerStatus === 'connected' && !results ? (
                       <div className="flex flex-col items-center justify-center gap-3 text-indigo-600 dark:text-indigo-400 font-semibold text-center">
@@ -793,6 +786,7 @@ export default function App() {
                   </div>
                   <h3 className="font-bold text-xl mb-2">{t.uploadYourHistory}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">{t.usuallyFile} <code className="bg-gray-100 dark:bg-gray-900 px-1.5 py-0.5 rounded text-indigo-600 dark:text-indigo-400 font-mono text-xs">Records.json</code></p>
+                  
                   <div className="relative w-full group">
                     <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-rose-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
                     <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="relative text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-gray-700 file:text-white hover:file:bg-gray-800 dark:hover:file:bg-gray-600 w-full cursor-pointer bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm" />
@@ -801,13 +795,16 @@ export default function App() {
                 </div>
               )}
             </div>
+
             {results && (
               <div className="w-full max-w-3xl mt-12 animate-fade-in">
                 <h2 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 mb-8 flex items-center justify-center gap-3">
                   {results.length > 0 ? <><Sparkles className="text-rose-500"/> {t.foundMatches}</> : t.noMatches}
                 </h2>
                 <div className="space-y-6">
+                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
                   <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
+                  
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
@@ -827,6 +824,7 @@ export default function App() {
                       </div>
                     );
                   })}
+                  
                   {results.length > visibleCount && (
                     <div className="text-center pt-6">
                       <button onClick={() => setVisibleCount(v => v + 5)} className="px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full font-bold text-sm transition-colors border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -840,17 +838,21 @@ export default function App() {
             )}
           </>
         ) : (
+          // ================= RENDEROWANIE: TRYB HOSTA =================
           <>
             <div className="mt-2 mb-8 animate-fade-in hidden sm:block">
               <div className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-200 dark:border-gray-700 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
                 <ShieldCheck size={18} className="text-emerald-500" /> {t.secureBadge}
               </div>
             </div>
+
             <div className="text-center max-w-3xl mb-12">
               <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight flex items-center justify-center gap-3 sm:gap-4 mb-4">
                 <MapPin size={48} className="text-rose-500 hidden sm:block" /> {t.title}
               </h1>
-              <p className="text-lg sm:text-xl text-gray-500 dark:text-gray-400 leading-relaxed font-medium">{t.subtitle}</p>
+              <p className="text-lg sm:text-xl text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                {t.subtitle}
+              </p>
               <button onClick={() => setShowInstructions(true)} className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-full text-sm font-bold shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:scale-105 active:scale-95">
                 <CircleHelp size={18} className="text-indigo-500" /> {t.howToData}
               </button>
@@ -867,6 +869,7 @@ export default function App() {
             )}
 
             <div className="flex flex-col lg:flex-row gap-8 w-full max-w-5xl mb-12">
+              {/* Osoba A */}
               <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 ${fileA ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : errorA ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500'}`}>
                 {fileA ? (
                   <div className="text-center w-full animate-fade-in">
@@ -885,7 +888,13 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 overflow-hidden ${peerStatus === 'hosting' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' : peerStatus === 'connected' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : fileB ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300'}`}>
+
+              {/* Osoba B */}
+              <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 overflow-hidden ${
+                peerStatus === 'hosting' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' : 
+                peerStatus === 'connected' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 
+                fileB ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300'
+              }`}>
                 {peerStatus === 'hosting' ? (
                    <div className="text-center w-full animate-fade-in flex flex-col items-center">
                      <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><X size={20} /></button>
@@ -896,7 +905,7 @@ export default function App() {
                           <img src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinLink)}`} alt="QR Code" className="w-[160px] h-[160px]" />
                        </div>
                      )}
-                     <div className="bg-white dark:bg-gray-900 border border-indigo-100 dark:gray-700 rounded-2xl p-4 mb-6 w-full shadow-sm">
+                     <div className="bg-white dark:bg-gray-900 border border-indigo-100 dark:border-gray-700 rounded-2xl p-4 mb-6 w-full shadow-sm">
                         <div className="text-xs font-bold text-indigo-400 dark:text-indigo-500 mb-1 uppercase tracking-wider">{t.roomCode}</div>
                         <div className="text-4xl font-mono font-black text-indigo-900 dark:text-indigo-300 tracking-[0.25em]">{peerId}</div>
                      </div>
@@ -954,6 +963,7 @@ export default function App() {
                    <button onClick={() => applyPreset(5000, 720)} className="text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-3 py-1.5 rounded-lg hover:bg-rose-100 transition-colors">{t.presetCity}</button>
                 </div>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                 <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                   <label className="flex justify-between text-sm font-bold text-gray-700 dark:text-gray-300 mb-6">
@@ -1004,7 +1014,7 @@ export default function App() {
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
-                      <div key={i} id={`story-card-${match.time}`} className="bg-gray-50 dark:bg-gray-900 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow group">
+                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group">
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
                           <div>
                             <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 group-hover:text-rose-600 transition-colors">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>

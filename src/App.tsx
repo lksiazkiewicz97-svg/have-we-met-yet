@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Download } from 'lucide-react';
+import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Download, Share2 } from 'lucide-react';
 
 // Deklaracja globalnych zmiennych
 declare global {
@@ -54,8 +54,8 @@ const dict: Record<string, any> = {
     aiGenerating: "Sztuczna inteligencja tworzy magię...",
     aiStoryTitle: "Magia chwili (Pełna historia):",
     aiSources: "Źródła historyczne:",
-    shareStory: "Pobierz na Instagram / TikTok",
-    downloading: "Generowanie grafiki...",
+    shareStory: "Udostępnij (IG / TikTok)",
+    downloading: "Przygotowywanie grafiki...",
     guestModeTitle: "Dołączasz do sesji! 🎉",
     guestModeDesc: "Twój znajomy chce sprawdzić, czy kiedyś już się minęliście. Dodaj swoje wspomnienia z Map Google.",
     uploadYourHistory: "Prześlij swoją historię",
@@ -68,7 +68,8 @@ const dict: Record<string, any> = {
     peerErrorTitle: "Błąd połączenia",
     instructionModalDesc: "Z uwagi na pełną dbałość o Twoją prywatność, Google zapisuje Twoją historię (Oś czasu) wyłącznie na Twoim fizycznym urządzeniu. Musisz wykonać szybki eksport bezpośrednio ze smartfona.",
     method1: "Metoda 1: Twój Smartfon (Zalecane)",
-    step1: "Otwórz aplikację Mapy Google na telefonie.",
+    openTimelineBtn: "Otwórz Oś Czasu (Skrót)",
+    step1: "Otwórz aplikację Mapy Google na telefonie (lub użyj skrótu wyżej).",
     step2: "Kliknij swoje zdjęcie profilowe w prawym górnym rogu.",
     step3: "Wybierz \"Twoja oś czasu\".",
     step4: "Kliknij ikonę menu (prawy górny róg) i \"Ustawienia i prywatność\".",
@@ -120,8 +121,8 @@ const dict: Record<string, any> = {
     aiGenerating: "Artificial Intelligence is creating magic...",
     aiStoryTitle: "Magic of the moment (Full story):",
     aiSources: "Historical sources:",
-    shareStory: "Save for Instagram / TikTok",
-    downloading: "Generating image...",
+    shareStory: "Share (IG / TikTok)",
+    downloading: "Preparing poster...",
     guestModeTitle: "You're joining the session! 🎉",
     guestModeDesc: "Your friend wants to check if you've crossed paths before. Add your Google Maps memories.",
     uploadYourHistory: "Upload your history",
@@ -134,7 +135,8 @@ const dict: Record<string, any> = {
     peerErrorTitle: "Connection Error",
     instructionModalDesc: "For full privacy, Google stores your Location History (Timeline) only on your physical device. You need to do a quick export directly from your smartphone.",
     method1: "Method 1: Your Smartphone (Recommended)",
-    step1: "Open the Google Maps app on your phone.",
+    openTimelineBtn: "Open Timeline (Shortcut)",
+    step1: "Open the Google Maps app on your phone (or use the shortcut above).",
     step2: "Tap your profile picture in the top right corner.",
     step3: "Select \"Your Timeline\".",
     step4: "Tap the menu icon (top right) and \"Settings and privacy\".",
@@ -308,8 +310,12 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  // @ts-ignore - Ignorujemy błąd TypeScript, Vite automatycznie podstawi tu klucz podczas budowania na Cloudflare
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+  // Zaktualizowany odczyt klucza API dla Cloudflare
+  let apiKey = "";
+  try {
+    // @ts-ignore
+    apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+  } catch (e) {}
 
   const dateStr = new Date(match.time).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
   const timeStr = new Date(match.time).toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' });
@@ -334,6 +340,10 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   const generateShortStory = async () => {
+    if (!apiKey) {
+      setErrorMsg(lang === 'pl' ? "Błąd: Brak klucza API." : "Error: Missing API Key.");
+      return;
+    }
     setIsLoadingShort(true);
     setErrorMsg(null);
 
@@ -357,7 +367,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       setShortStory(candidate);
       setSources(data.candidates?.[0]?.groundingMetadata?.groundingAttributions?.map((a: any) => ({ uri: a.web?.uri, title: a.web?.title })).filter((a: any) => a.uri) || []);
     } catch (e) {
-      setErrorMsg(lang === 'pl' ? "Magia AI chwilowo zawiodła (sprawdź konsolę F12)." : "AI magic failed (check F12 console).");
+      setErrorMsg(lang === 'pl' ? "Magia AI chwilowo zawiodła (sprawdź klucz API)." : "AI magic failed (check API key).");
     } finally {
       setIsLoadingShort(false);
     }
@@ -399,19 +409,43 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     
     setIsDownloading(true);
     try {
+      // Magia pod maską: Karta dostaje tymczasową klasę, by wyglądać jak plakat premium
       element.classList.add('exporting-card');
       const canvas = await win.html2canvas(element, { 
-        backgroundColor: null, 
+        backgroundColor: '#1e1b4b', // Fallback koloru (tło wygenerowanego obrazka)
         scale: 3, 
         useCORS: true
       });
       element.classList.remove('exporting-card');
       
       const image = canvas.toDataURL("image/png");
-      const link = document.createElement('a');
-      link.download = `HaveWeMet-${dateStr.replace(/\//g, '-')}.png`;
-      link.href = image;
-      link.click();
+      const fileName = `HaveWeMet-${dateStr.replace(/\//g, '-')}.png`;
+
+      try {
+        // Konwersja base64 na plik (Blob) w celu użycia Web Share API
+        const response = await fetch(image);
+        const blob = await response.blob();
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        // Sprawdzenie, czy przeglądarka urządzenia obsługuje natywne udostępnianie plików
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: lang === 'pl' ? 'Nasze magiczne spotkanie!' : 'Our magical encounter!',
+            text: lang === 'pl' ? 'Sprawdź, kiedy nasze ścieżki przecięły się po raz pierwszy! 🤯📍 #HaveWeMet' : 'Look when our paths crossed for the first time! 🤯📍 #HaveWeMet',
+          });
+        } else {
+          // Fallback (np. dla Desktopu) - standardowe pobieranie pliku
+          throw new Error("Web Share API not supported");
+        }
+      } catch (shareErr) {
+        // Fallback działa również gdy użytkownik anuluje systemowe okno dzielenia
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = image;
+        link.click();
+      }
+
     } catch (e) {
       console.error(e);
       element.classList.remove('exporting-card');
@@ -421,7 +455,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   return (
-    <div className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-5">
+    <div className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-5 relative z-10">
       {!shortStory && !isLoadingShort && (
         <button onClick={generateShortStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full transition-colors border border-indigo-200 dark:border-indigo-800/50 font-medium w-full sm:w-auto justify-center group hide-on-export">
           <Sparkles size={16} className="text-indigo-500 group-hover:animate-spin" />
@@ -440,12 +474,12 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       )}
 
       {shortStory && (
-        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-5 rounded-2xl border border-indigo-100/50 dark:border-indigo-800/30 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Sparkles size={64} /></div>
-          <div className="flex items-center gap-2 mb-3 text-indigo-800 dark:text-indigo-300 font-bold text-sm relative z-10">
+        <div className="story-content-container bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-5 rounded-2xl border border-indigo-100/50 dark:border-indigo-800/30 shadow-sm relative overflow-hidden transition-all">
+          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none icon-sparkle-bg"><Sparkles size={64} /></div>
+          <div className="flex items-center gap-2 mb-3 text-indigo-800 dark:text-indigo-300 font-bold text-sm relative z-10 ai-title">
             <MapPin size={16} className="text-indigo-600 dark:text-indigo-400" /> {t.aiMapPoint}
           </div>
-          <p className="text-sm text-gray-800 dark:text-gray-200 font-medium leading-relaxed relative z-10">{shortStory}</p>
+          <p className="text-sm text-gray-800 dark:text-gray-200 font-medium leading-relaxed relative z-10 ai-text">{shortStory}</p>
           
           {!longStory && !isLoadingLong && (
              <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10 hide-on-export">
@@ -463,15 +497,16 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
             </div>
           )}
           {longStory && (
-            <div className="mt-5 pt-5 border-t border-indigo-200 dark:border-indigo-800/50 animate-fade-in relative z-10">
-              <div className="flex items-center gap-2 mb-3 text-rose-600 dark:text-rose-400 font-bold text-sm">
+            <div className="mt-5 pt-5 border-t border-indigo-200 dark:border-indigo-800/50 animate-fade-in relative z-10 generated-long-story">
+              <div className="flex items-center gap-2 mb-3 text-rose-600 dark:text-rose-400 font-bold text-sm ai-title">
                 <Sparkles size={16} /> {t.aiStoryTitle}
               </div>
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic">"{longStory}"</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic ai-text font-serif">"{longStory}"</p>
               
-              <div className="mt-6 flex justify-end hide-on-export">
-                <button onClick={handleShare} disabled={isDownloading} className="flex items-center gap-2 text-xs px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:scale-105 transition-transform rounded-full font-bold shadow-lg">
-                   {isDownloading ? <Activity size={14} className="animate-spin" /> : <Download size={14} />} 
+              {/* NOWY PRZYCISK SHARE (Web Share API) */}
+              <div className="mt-8 flex justify-end hide-on-export">
+                <button onClick={handleShare} disabled={isDownloading} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:scale-105 transition-transform rounded-full font-bold shadow-xl">
+                   {isDownloading ? <Activity size={16} className="animate-spin" /> : <Share2 size={16} />} 
                    {isDownloading ? t.downloading : t.shareStory}
                 </button>
               </div>
@@ -523,6 +558,8 @@ export default function App() {
   const [joinLink, setJoinLink] = useState<string>('');
   const [manualJoinCode, setManualJoinCode] = useState<string>(''); 
   const [copySuccess, setCopySuccess] = useState<boolean>(false); 
+  
+  // @ts-ignore
   const [peerError, setPeerError] = useState<string | null>(null);
   
   const [peerConnection, setPeerConnection] = useState<any>(null);
@@ -926,7 +963,7 @@ export default function App() {
                    </div>
                 ) : peerStatus === 'connected' && fileB ? (
                    <div className="text-center w-full animate-fade-in">
-                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
+                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm" title="Zakończ sesję"><Trash2 size={20} /></button>
                      <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"><Smartphone className="text-emerald-600 dark:text-emerald-400 w-10 h-10" /></div>
                      <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.guestJoined}</h3>
                      <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">{t.guestJoinedDesc.replace('{n}', fileB.length.toLocaleString('pl-PL'))}</p>
@@ -1023,16 +1060,42 @@ export default function App() {
                   {results.length > 0 ? <><Sparkles className="text-rose-500" size={36} /> {t.foundMatches}</> : t.noMatches}
                 </h2>
                 
-                {/* PAGINACJA WYNIKÓW */}
+                {/* PAGINACJA WYNIKÓW I KARTY */}
                 <div className="space-y-6 relative z-10">
-                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
-                  <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
+                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD */}
+                  <style>{`
+                    .exporting-card .hide-on-export { display: none !important; }
+                    .exporting-card .watermark-only { display: block !important; }
+                    .exporting-card {
+                      background: linear-gradient(150deg, #1e1b4b 0%, #312e81 40%, #701a75 100%) !important;
+                      color: #f8fafc !important;
+                      border-radius: 40px !important;
+                      padding: 60px 40px 100px 40px !important;
+                      border: none !important;
+                      box-shadow: none !important;
+                    }
+                    .exporting-card .text-rose-500 { color: #fb7185 !important; }
+                    .exporting-card .text-indigo-500, .exporting-card .text-indigo-600, .exporting-card .text-indigo-700 { color: #c7d2fe !important; }
+                    .exporting-card .text-gray-500, .exporting-card .text-gray-600, .exporting-card .text-gray-700, .exporting-card .text-gray-800 { color: #e2e8f0 !important; }
+                    .exporting-card .border-gray-100, .exporting-card .border-b, .exporting-card .border-indigo-100, .exporting-card .border-indigo-200 { border-color: rgba(255,255,255,0.15) !important; }
+                    .exporting-card .bg-indigo-50, .exporting-card .bg-gray-50, .exporting-card .bg-white { background: rgba(255,255,255,0.1) !important; border: 1px solid rgba(255,255,255,0.2) !important; backdrop-filter: blur(10px); }
+                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 32px !important; margin-top: 30px !important; }
+                    .exporting-card .icon-sparkle-bg { opacity: 0.2 !important; color: #fff !important; }
+                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 10px !important; padding-top: 0 !important; }
+                  `}</style>
                   
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
-                      <div key={i} id={`story-card-${match.time}`} className="bg-gray-50 dark:bg-gray-900 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow group">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
+                      <div key={i} id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group">
+                        
+                        {/* Znak wodny, ukryty normalnie, widoczny TYLKO na obrazku udostępnionym na Insta */}
+                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hidden watermark-only"></div>
+                        <div className="absolute bottom-8 left-0 right-0 text-center hidden watermark-only">
+                           <span className="text-white/60 font-black tracking-[0.4em] text-xs drop-shadow-md">📍 HAVEWEMET.APP</span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10">
                           <div>
                             <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 group-hover:text-rose-600 transition-colors">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
                             <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2">
@@ -1081,6 +1144,12 @@ export default function App() {
                   <h3 className="font-extrabold text-indigo-900 dark:text-indigo-300 mb-4 flex items-center gap-2 text-xl">
                     <Smartphone className="text-indigo-500" /> {t.method1}
                   </h3>
+                  
+                  {/* Przycisk głębokiego linkowania do osi czasu */}
+                  <a href="https://www.google.com/maps/timeline" target="_blank" rel="noopener noreferrer" className="mb-5 flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-sm transition-all active:scale-95">
+                    <MapPin size={18} /> {t.openTimelineBtn}
+                  </a>
+
                   <ol className="space-y-4 text-sm text-gray-700 dark:text-gray-300 list-decimal list-inside font-medium marker:text-indigo-400 marker:font-bold">
                     <li className="pl-2">{t.step1}</li>
                     <li className="pl-2">{t.step2}</li>

@@ -292,7 +292,7 @@ const MapView = ({ matches }: { matches: any[] }) => {
 
   if (!matches || matches.length === 0) return null;
   return (
-    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm relative z-0 hide-on-export">
+    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm relative z-0">
       <div ref={mapRef} className="w-full h-[400px] bg-gray-50 dark:bg-gray-800" />
     </div>
   );
@@ -350,18 +350,15 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       ? "Napisz maksymalnie 2 krótkie zdania podsumowania po polsku, gdzie się minęli na podstawie tych współrzędnych."
       : "Write max 2 short sentences in English summarizing where they crossed paths based on these coordinates.";
       
-    // ZRESTYKCYJNY PROMPT DLA WIĘKSZEJ PRECYZJI I AUTOSTRAD
+    // ZRESTYKCYJNY PROMPT DLA WIĘKSZEJ PRECYZJI
     const prompt = `Data: ${dateStr}, Godzina: ${timeStr}. Lat: ${match.lat}, Lon: ${match.lon}. Dystans: ${match.distance}m. 
-    WAŻNE: Działasz jako super precyzyjny geolokator. Zidentyfikuj DOKŁADNE miejsce pod tymi współrzędnymi GPS. 
-    1. Jeśli współrzędne wskazują na autostradę (np. A1, A2, A4), drogę ekspresową (np. S7, S8) lub inną drogę szybkiego ruchu w trasie: WYRAŹNIE TO ZAZNACZ. Zamiast pisać o spacerze, napisz, że najprawdopodobniej minęliście się w pędzących samochodach, na trasie lub w korku. Nie wymyślaj chodników, jeśli to szczere pole lub środek autostrady!
-    2. Jeśli to zwykła ulica, podaj jej nazwę. 
-    3. NIE UŻYWAJ i nie "przyklejaj" tego punktu do nazw pobliskich dużych obiektów (np. galerii handlowych jak Wroclavia, stadionów, rynków), chyba że współrzędne znajdują się BEZPOŚREDNIO na ich terenie.
+    WAŻNE: Działasz jako super precyzyjny geolokator. Zidentyfikuj DOKŁADNE miejsce pod tymi współrzędnymi GPS. Jeśli to zwykła ulica, podaj jej nazwę. NIE UŻYWAJ i nie "przyklejaj" tego punktu do nazw pobliskich dużych obiektów (np. galerii handlowych jak Wroclavia, stadionów, rynków), chyba że współrzędne znajdują się BEZPOŚREDNIO wewnątrz tych obiektów.
     ${promptParams} Bądź zwięzły i zaintryguj ich podając najdokładniejszą lokalizację.`;
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
-      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Bezwzględnie odróżniasz miasta i budynki od autostrad i dróg szybkiego ruchu w szczerym polu." }] }
+      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Respond in requested language." }] }
     };
 
     try {
@@ -381,10 +378,10 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const generateLongStory = async () => {
     setIsLoadingLong(true);
     let promptParams = lang === 'pl' 
-      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki, lekko tajemniczy."
+      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki."
       : "Write 4-5 sentences of an intriguing, romantic story in English about how they might have passed each other here.";
 
-    const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło (Trzymaj się DOKŁADNIE tej lokalizacji i charakteru miejsca - jeśli to autostrada, opisz mijające się samochody, jeśli miasto, miejski zgiełk): ${shortStory}.`;
+    const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło (Trzymaj się DOKŁADNIE tej lokalizacji, nie wspominaj o pobliskich większych budynkach): ${shortStory}.`;
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
@@ -407,7 +404,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   return (
-    <div className="mt-5 pt-5 relative z-10 w-full border-t border-gray-100 dark:border-gray-800 ai-section-export">
+    <div className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-5 relative z-10 w-full">
       {!shortStory && !isLoadingShort && (
         <button onClick={generateShortStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full transition-colors border border-indigo-200 dark:border-indigo-800/50 font-medium w-full sm:w-auto justify-center group hide-on-export">
           <Sparkles size={16} className="text-indigo-500 group-hover:animate-spin" />
@@ -488,19 +485,11 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
     
     setIsDownloading(true);
     try {
-      // Dodajemy klasę, która narzuca sztywne wymiary (540x960) pod idealne proporcje 9:16
       element.classList.add('exporting-card');
-      
-      // Delikatne opóźnienie dla przeglądarki na przemalowanie układu do nowych proporcji
-      await new Promise(r => setTimeout(r, 100)); 
-
       const canvas = await win.html2canvas(element, { 
-        backgroundColor: null, // Używamy naszego gradientu z CSS
-        scale: 3, // Bardzo wysoka rozdzielczość na social media
-        useCORS: true,
-        windowWidth: 540,
-        width: 540,
-        height: element.scrollHeight > 960 ? element.scrollHeight : 960
+        backgroundColor: '#1e1b4b', 
+        scale: 3, 
+        useCORS: true
       });
       element.classList.remove('exporting-card');
       
@@ -513,7 +502,8 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
         const file = new File([blob], fileName, { type: 'image/png' });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          // TIP: Wysyłając TYLKO plik, wymuszamy na mobilkach UI wyboru aplikacji zdjęciowych (IG, Snapchat)
+          // TIP: Samo przesłanie pliku (bez text i title) wymusza w wielu smartfonach (szczególnie iOS)
+          // wywołanie opcji graficznych udostępniania, gdzie Instagram Story / Snapchat grają pierwsze skrzypce!
           await navigator.share({
             files: [file]
           });
@@ -521,7 +511,7 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
           throw new Error("Web Share API not supported");
         }
       } catch (shareErr) {
-        // Fallback dla desktopu
+        // Fallback dla komputerów stacjonarnych lub w przypadku przerwania okna dialogowego
         const link = document.createElement('a');
         link.download = fileName;
         link.href = image;
@@ -536,31 +526,25 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
   };
 
   return (
-    <div id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all group overflow-hidden w-full export-container-reset">
-      
-      {/* NAGŁÓWEK TYLKO DLA EKSPORTU */}
-      <div className="hidden export-header">
-        Nasze pierwsze spotkanie
-      </div>
-
+    <div id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group overflow-hidden w-full">
       {/* Znak wodny, ukryty normalnie, widoczny TYLKO na obrazku udostępnionym na Insta */}
-      <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hidden watermark-only"></div>
+      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hidden watermark-only"></div>
       <div className="absolute bottom-10 left-0 right-0 text-center hidden watermark-only">
-         <span className="text-white/60 font-black tracking-[0.4em] text-xs drop-shadow-md">📍 HAVEWEMET.APP</span>
+         <span className="text-white/80 font-black tracking-[0.4em] text-sm drop-shadow-lg">📍 HAVEWEMET.APP</span>
       </div>
 
       {/* Kontener nagłówka wymuszający bezpieczny Flexbox przy renderowaniu Canvas */}
-      <div className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10 w-full export-row">
-        <div className="flex flex-col flex-1 min-w-0 export-date-block">
-          <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 truncate date-text">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
-          <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2 time-text">
+      <div className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10 w-full">
+        <div className="flex flex-col flex-1 shrink-0">
+          <div className="text-2xl font-black text-rose-500 tracking-tight mb-1">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
+          <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2">
             <span>{date.toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' })}</span>
           </div>
         </div>
-        {/* Pigułka z odległością - shrink-0 zabrania zgniatania napisu */}
-        <div className="flex justify-end items-center shrink-0 pl-4 export-distance-block">
-          <div className="distance-badge text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-indigo-100 dark:border-indigo-800/50 whitespace-nowrap">
-             <MapPin size={16} className="shrink-0 distance-icon"/> {t.distance}: {match.distance} m
+        {/* Pigułka z odległością. Użyto align-items i shrink-0 dla powstrzymania zgniatania w html2canvas */}
+        <div className="flex justify-end items-center shrink-0 pl-4">
+          <div className="text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-indigo-100 dark:border-indigo-800/50 whitespace-nowrap">
+             <MapPin size={16} className="shrink-0"/> {t.distance}: {match.distance} m
           </div>
         </div>
       </div>
@@ -905,38 +889,25 @@ export default function App() {
                     .exporting-card .hide-on-export { display: none !important; }
                     .exporting-card .watermark-only { display: block !important; }
                     .exporting-card {
-                      width: 540px !important;
-                      min-height: 960px !important;
-                      background: radial-gradient(circle at top left, #3b0764, #1e1b4b 50%, #0f172a) !important;
+                      background: linear-gradient(150deg, #1e1b4b 0%, #312e81 40%, #701a75 100%) !important;
                       color: #f8fafc !important;
                       border-radius: 40px !important;
-                      padding: 60px !important;
-                      border: 4px solid rgba(255,255,255,0.1) !important;
+                      padding: 80px 50px 140px 50px !important;
+                      border: none !important;
                       box-shadow: none !important;
                       display: flex !important;
                       flex-direction: column !important;
                       justify-content: center !important;
-                      align-items: center !important;
-                      text-align: center !important;
-                      box-sizing: border-box !important;
+                      min-height: 850px !important;
                     }
-                    .exporting-card .export-container-reset { padding: 0 !important; margin: 0 !important; }
-                    .exporting-card .export-header { display: block !important; font-size: 1.25rem !important; font-weight: 900 !important; color: #f472b6 !important; letter-spacing: 0.2em !important; text-transform: uppercase !important; margin-bottom: 40px !important; }
-                    .exporting-card .export-row { flex-direction: column !important; align-items: center !important; border: none !important; margin-bottom: 20px !important; }
-                    .exporting-card .export-date-block { align-items: center !important; margin-bottom: 20px !important; }
-                    .exporting-card .date-text { font-size: 3.5rem !important; line-height: 1 !important; margin-bottom: 10px !important; color: #fff !important; }
-                    .exporting-card .time-text { font-size: 1.5rem !important; color: #cbd5e1 !important; justify-content: center !important; }
-                    .exporting-card .export-distance-block { padding: 0 !important; margin-top: 10px !important; }
-                    .exporting-card .distance-badge { background: rgba(255,255,255,0.1) !important; border-color: rgba(255,255,255,0.2) !important; color: #fff !important; font-size: 1.5rem !important; padding: 16px 32px !important; border-radius: 999px !important; }
-                    .exporting-card .distance-icon { width: 24px !important; height: 24px !important; }
-                    
-                    /* AI Section in Export */
-                    .exporting-card .ai-section-export { border-top: none !important; width: 100% !important; margin-top: 20px !important; padding-top: 0 !important; }
-                    .exporting-card .story-content-container { background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.1) !important; border-radius: 32px !important; padding: 40px !important; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5) !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
-                    .exporting-card .ai-title { justify-content: center !important; color: #f472b6 !important; font-size: 1.1rem !important; margin-bottom: 16px !important; text-transform: uppercase !important; letter-spacing: 0.1em !important; }
-                    .exporting-card .ai-text { font-size: 1.25rem !important; line-height: 1.6 !important; color: #f8fafc !important; font-style: italic !important; text-align: center !important; }
+                    .exporting-card .text-rose-500 { color: #fb7185 !important; }
+                    .exporting-card .text-indigo-500, .exporting-card .text-indigo-600, .exporting-card .text-indigo-700 { color: #c7d2fe !important; }
+                    .exporting-card .text-gray-500, .exporting-card .text-gray-600, .exporting-card .text-gray-700, .exporting-card .text-gray-800 { color: #e2e8f0 !important; }
+                    .exporting-card .border-gray-100, .exporting-card .border-b, .exporting-card .border-indigo-100, .exporting-card .border-indigo-200 { border-color: rgba(255,255,255,0.15) !important; }
+                    .exporting-card .bg-indigo-50, .exporting-card .bg-gray-50, .exporting-card .bg-white { background: rgba(255,255,255,0.1) !important; border: 1px solid rgba(255,255,255,0.2) !important; backdrop-filter: blur(10px); }
+                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 40px !important; margin-top: 40px !important; }
                     .exporting-card .icon-sparkle-bg { opacity: 0.2 !important; color: #fff !important; }
-                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 20px !important; padding-top: 0 !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
+                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 15px !important; padding-top: 0 !important; }
                   `}</style>
                   
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
@@ -1138,38 +1109,25 @@ export default function App() {
                     .exporting-card .hide-on-export { display: none !important; }
                     .exporting-card .watermark-only { display: block !important; }
                     .exporting-card {
-                      width: 540px !important;
-                      min-height: 960px !important;
-                      background: radial-gradient(circle at top left, #3b0764, #1e1b4b 50%, #0f172a) !important;
+                      background: linear-gradient(150deg, #1e1b4b 0%, #312e81 40%, #701a75 100%) !important;
                       color: #f8fafc !important;
                       border-radius: 40px !important;
-                      padding: 60px !important;
-                      border: 4px solid rgba(255,255,255,0.1) !important;
+                      padding: 80px 50px 140px 50px !important;
+                      border: none !important;
                       box-shadow: none !important;
                       display: flex !important;
                       flex-direction: column !important;
                       justify-content: center !important;
-                      align-items: center !important;
-                      text-align: center !important;
-                      box-sizing: border-box !important;
+                      min-height: 850px !important;
                     }
-                    .exporting-card .export-container-reset { padding: 0 !important; margin: 0 !important; }
-                    .exporting-card .export-header { display: block !important; font-size: 1.25rem !important; font-weight: 900 !important; color: #f472b6 !important; letter-spacing: 0.2em !important; text-transform: uppercase !important; margin-bottom: 40px !important; }
-                    .exporting-card .export-row { flex-direction: column !important; align-items: center !important; border: none !important; margin-bottom: 20px !important; }
-                    .exporting-card .export-date-block { align-items: center !important; margin-bottom: 20px !important; }
-                    .exporting-card .date-text { font-size: 3.5rem !important; line-height: 1 !important; margin-bottom: 10px !important; color: #fff !important; }
-                    .exporting-card .time-text { font-size: 1.5rem !important; color: #cbd5e1 !important; justify-content: center !important; }
-                    .exporting-card .export-distance-block { padding: 0 !important; margin-top: 10px !important; }
-                    .exporting-card .distance-badge { background: rgba(255,255,255,0.1) !important; border-color: rgba(255,255,255,0.2) !important; color: #fff !important; font-size: 1.5rem !important; padding: 16px 32px !important; border-radius: 999px !important; }
-                    .exporting-card .distance-icon { width: 24px !important; height: 24px !important; }
-                    
-                    /* AI Section in Export */
-                    .exporting-card .ai-section-export { border-top: none !important; width: 100% !important; margin-top: 20px !important; padding-top: 0 !important; }
-                    .exporting-card .story-content-container { background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.1) !important; border-radius: 32px !important; padding: 40px !important; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5) !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
-                    .exporting-card .ai-title { justify-content: center !important; color: #f472b6 !important; font-size: 1.1rem !important; margin-bottom: 16px !important; text-transform: uppercase !important; letter-spacing: 0.1em !important; }
-                    .exporting-card .ai-text { font-size: 1.25rem !important; line-height: 1.6 !important; color: #f8fafc !important; font-style: italic !important; text-align: center !important; }
+                    .exporting-card .text-rose-500 { color: #fb7185 !important; }
+                    .exporting-card .text-indigo-500, .exporting-card .text-indigo-600, .exporting-card .text-indigo-700 { color: #c7d2fe !important; }
+                    .exporting-card .text-gray-500, .exporting-card .text-gray-600, .exporting-card .text-gray-700, .exporting-card .text-gray-800 { color: #e2e8f0 !important; }
+                    .exporting-card .border-gray-100, .exporting-card .border-b, .exporting-card .border-indigo-100, .exporting-card .border-indigo-200 { border-color: rgba(255,255,255,0.15) !important; }
+                    .exporting-card .bg-indigo-50, .exporting-card .bg-gray-50, .exporting-card .bg-white { background: rgba(255,255,255,0.1) !important; border: 1px solid rgba(255,255,255,0.2) !important; backdrop-filter: blur(10px); }
+                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 40px !important; margin-top: 40px !important; }
                     .exporting-card .icon-sparkle-bg { opacity: 0.2 !important; color: #fff !important; }
-                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 20px !important; padding-top: 0 !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
+                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 15px !important; padding-top: 0 !important; }
                   `}</style>
                   
                   {results.slice(0, visibleCount).map((match: any, i: number) => {

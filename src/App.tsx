@@ -195,7 +195,7 @@ const workerScript = `
   };
 `;
 
-// NORMALIZATOR
+// NORMALIZACJA
 const normalizeData = (data: any): any[] => {
   const normalized: any[] = [];
   const parseGeo = (geoStr: any): any => {
@@ -271,7 +271,7 @@ const MapView = ({ matches }: { matches: any[] }) => {
           const bounds = (window as any).L.latLngBounds();
           matches.forEach((m: any) => {
             const date = new Date(m.time);
-            (window as any).L.marker([m.lat, m.lon]).addTo(mapInstance.current).bindPopup(`<div style="font-family: ui-sans-serif, system-ui, sans-serif; padding: 4px;"><div style="color: #e11d48; font-weight: 700; font-size: 14px; margin-bottom: 4px;">📍 Point</div><div style="color: #4b5563; font-size: 12px;">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div><div style="color: #111827; font-size: 13px; font-weight: 500; margin-top: 4px;">Dist: ${m.distance}m</div></div>`);
+            (window as any).L.marker([m.lat, m.lon]).addTo(mapInstance.current).bindPopup(`<div style="font-family: ui-sans-serif, system-ui, sans-serif; padding: 4px;"><div style="color: #e11d48; font-weight: 700; font-size: 14px; margin-bottom: 4px;">📍 Wspólny punkt</div><div style="color: #4b5563; font-size: 12px;">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div><div style="color: #111827; font-size: 13px; font-weight: 500; margin-top: 4px;">Dystans: ${m.distance}m</div></div>`);
             bounds.extend([m.lat, m.lon]);
           });
           if (matches.length === 1) mapInstance.current?.setView([matches[0].lat, matches[0].lon], 16);
@@ -303,16 +303,10 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  // Bezpieczny dostęp do zmiennych środowiskowych Vite/Cloudflare (naprawa TS & warningów)
-  const getApiKey = () => {
-    try {
-      const meta = import.meta as any;
-      return meta.env?.VITE_GEMINI_API_KEY || "AIzaSyAdZNZSShUF1VdvDjkQqpLDkdeGRcj0zGQ";
-    } catch {
-      return "AIzaSyAdZNZSShUF1VdvDjkQqpLDkdeGRcj0zGQ";
-    }
-  };
-  const apiKey = getApiKey();
+  // ZMIANA: Czysty, standardowy odczyt zmiennych dla Vite.
+  // @ts-ignore wycisza problem TypeScripta bez psucia kompilacji w locie.
+  // @ts-ignore
+  const apiKey = import.meta.env?.VITE_GEMINI_API_KEY || "";
 
   const dateStr = new Date(match.time).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
   const timeStr = new Date(match.time).toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' });
@@ -333,7 +327,13 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   const generateShortStory = async () => {
+    if (!apiKey) {
+      setErrorMsg(lang === 'pl' ? "Błąd: Brak klucza API w konfiguracji Cloudflare (VITE_GEMINI_API_KEY)." : "Error: API Key missing in Cloudflare config (VITE_GEMINI_API_KEY).");
+      return;
+    }
     setIsLoadingShort(true);
+    setErrorMsg(null);
+
     let promptParams = lang === 'pl' 
       ? "Napisz maksymalnie 2 krótkie zdania podsumowania po polsku, gdzie się minęli na podstawie tych współrzędnych."
       : "Write max 2 short sentences in English summarizing where they crossed paths based on these coordinates.";
@@ -348,10 +348,12 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
 
     try {
       const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      setShortStory(data.candidates?.[0]?.content?.parts?.[0]?.text);
+      const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!candidate) throw new Error("No data");
+      setShortStory(candidate);
       setSources(data.candidates?.[0]?.groundingMetadata?.groundingAttributions?.map((a: any) => ({ uri: a.web?.uri, title: a.web?.title })).filter((a: any) => a.uri) || []);
     } catch (e) {
-      setErrorMsg(lang === 'pl' ? "Magia AI chwilowo zawiodła (brak klucza)." : "AI magic failed (missing API key).");
+      setErrorMsg(lang === 'pl' ? "Magia AI chwilowo zawiodła (sprawdź klucz API)." : "AI magic failed (check API key).");
     } finally {
       setIsLoadingShort(false);
     }
@@ -372,7 +374,9 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
 
     try {
       const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      setLongStory(data.candidates?.[0]?.content?.parts?.[0]?.text);
+      const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!candidate) throw new Error("No data");
+      setLongStory(candidate);
       const newSources = data.candidates?.[0]?.groundingMetadata?.groundingAttributions?.map((a: any) => ({ uri: a.web?.uri, title: a.web?.title })).filter((a: any) => a.uri) || [];
       setSources(prev => [...prev, ...newSources].filter((v, i, a) => a.findIndex(t => (t.uri === v.uri)) === i));
     } catch (e) {
@@ -383,14 +387,15 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   const handleShare = async () => {
-    if (!(window as any).html2canvas) return;
+    const win = window as any;
+    if (!win.html2canvas) return;
     const element = document.getElementById(`story-card-${match.time}`);
     if (!element) return;
     
     setIsDownloading(true);
     try {
       element.classList.add('exporting-card');
-      const canvas = await (window as any).html2canvas(element, { 
+      const canvas = await win.html2canvas(element, { 
         backgroundColor: null, 
         scale: 3, 
         useCORS: true
@@ -435,7 +440,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
           <div className="flex items-center gap-2 mb-3 text-indigo-800 dark:text-indigo-300 font-bold text-sm relative z-10">
             <MapPin size={16} className="text-indigo-600 dark:text-indigo-400" /> {t.aiMapPoint}
           </div>
-          <p className="text-sm text-gray-800 dark:text-gray-200 font-medium line-relaxed relative z-10">{shortStory}</p>
+          <p className="text-sm text-gray-800 dark:text-gray-200 font-medium leading-relaxed relative z-10">{shortStory}</p>
           
           {!longStory && !isLoadingLong && (
              <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10 hide-on-export">
@@ -491,7 +496,6 @@ export default function App() {
   const [theme, setTheme] = useState<string>('light');
   const t = dict[lang];
 
-  // Silne typowanie stanów Reacta naprawia błędy TypeScript (Never type fix)
   const [fileA, setFileA] = useState<any[] | null>(null);
   const [fileB, setFileB] = useState<any[] | null>(null);
   const [errorA, setErrorA] = useState<string | null>(null);
@@ -514,6 +518,9 @@ export default function App() {
   const [joinLink, setJoinLink] = useState<string>('');
   const [manualJoinCode, setManualJoinCode] = useState<string>(''); 
   const [copySuccess, setCopySuccess] = useState<boolean>(false); 
+  
+  // ZMIANA: Wyciszamy warning rygorystycznego kompilatora w środowisku zewnętrznym
+  // @ts-ignore
   const [peerError, setPeerError] = useState<string | null>(null);
   
   const [peerConnection, setPeerConnection] = useState<any>(null);
@@ -726,6 +733,7 @@ export default function App() {
         <TopBar />
 
         {isGuestMode ? (
+          // ================= RENDEROWANIE: TRYB GOŚCIA =================
           <>
             <div className="absolute top-6 left-6 hidden sm:block">
               <div className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-100 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300">
@@ -760,8 +768,8 @@ export default function App() {
                   <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
                     <CircleCheck className="text-emerald-600 dark:text-emerald-400 w-10 h-10" />
                   </div>
-                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">Pomyślnie dodano!</h3>
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">Zabezpieczono {fileA.length.toLocaleString('pl-PL')} punktów.</p>
+                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.readyHost}</h3>
+                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">{t.readyPts.replace('{n}', fileA.length.toLocaleString('pl-PL'))}</p>
                   
                   <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-emerald-50 dark:border-emerald-900/30">
                     {peerStatus === 'connected' && !results ? (
@@ -916,7 +924,7 @@ export default function App() {
                    </div>
                 ) : peerStatus === 'connected' && fileB ? (
                    <div className="text-center w-full animate-fade-in">
-                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm" title="Zakończ sesję"><Trash2 size={20} /></button>
+                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
                      <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"><Smartphone className="text-emerald-600 dark:text-emerald-400 w-10 h-10" /></div>
                      <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.guestJoined}</h3>
                      <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">{t.guestJoinedDesc.replace('{n}', fileB.length.toLocaleString('pl-PL'))}</p>
@@ -957,6 +965,8 @@ export default function App() {
             <div className="w-full max-w-5xl bg-white dark:bg-gray-800 rounded-[2rem] p-8 sm:p-10 border border-gray-200 dark:border-gray-700 mb-12 shadow-sm">
               <div className="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-8">
                 <h3 className="text-xl font-extrabold flex items-center gap-3"><Settings size={24} className="text-indigo-500" /> {t.searchParams}</h3>
+                
+                {/* PRESETY */}
                 <div className="hidden md:flex gap-2">
                    <button onClick={() => applyPreset(50, 60)} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">{t.presetParty}</button>
                    <button onClick={() => applyPreset(500, 180)} className="text-xs font-bold bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-3 py-1.5 rounded-lg hover:bg-purple-100 transition-colors">{t.presetFest}</button>
@@ -980,6 +990,7 @@ export default function App() {
                   <input type="range" min="1" max="1440" step="1" value={maxTimeDiff} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxTimeDiff(parseInt(e.target.value))} className="w-full h-2 bg-gray-300 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-rose-500" />
                 </div>
               </div>
+              
               <div className="md:hidden flex flex-wrap justify-center gap-2 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
                  <button onClick={() => applyPreset(50, 60)} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 px-3 py-1.5 rounded-lg">{t.presetParty}</button>
                  <button onClick={() => applyPreset(500, 180)} className="text-xs font-bold bg-purple-50 dark:bg-purple-900/30 text-purple-700 px-3 py-1.5 rounded-lg">{t.presetFest}</button>
@@ -1009,12 +1020,16 @@ export default function App() {
                 <h2 className="text-3xl sm:text-4xl font-extrabold mb-10 flex items-center gap-4 relative z-10">
                   {results.length > 0 ? <><Sparkles className="text-rose-500" size={36} /> {t.foundMatches}</> : t.noMatches}
                 </h2>
+                
+                {/* PAGINACJA WYNIKÓW */}
                 <div className="space-y-6 relative z-10">
+                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
                   <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
+                  
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
-                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group">
+                      <div key={i} id={`story-card-${match.time}`} className="bg-gray-50 dark:bg-gray-900 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow group">
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
                           <div>
                             <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 group-hover:text-rose-600 transition-colors">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
@@ -1032,6 +1047,7 @@ export default function App() {
                       </div>
                     );
                   })}
+                  
                   {results.length > visibleCount && (
                     <div className="text-center pt-6">
                       <button onClick={() => setVisibleCount(v => v + 5)} className="px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full font-bold text-sm transition-colors border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -1046,6 +1062,7 @@ export default function App() {
           </>
         )}
 
+        {/* MODAL INSTRUKCJI - WSPÓLNY DLA OBU WIDOKÓW */}
         {showInstructions && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md overflow-y-auto animate-fade-in">
             <div className="bg-white dark:bg-gray-800 rounded-[2rem] p-8 max-w-3xl w-full shadow-2xl relative my-8 border border-gray-100 dark:border-gray-700">
@@ -1053,7 +1070,10 @@ export default function App() {
               <h2 className="text-3xl font-extrabold mb-4 flex items-center gap-3 text-gray-900 dark:text-gray-100">
                 <CircleHelp size={32} className="text-indigo-500" /> {t.howToData}
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 text-base mb-8 font-medium leading-relaxed">{t.instructionModalDesc}</p>
+              <p className="text-gray-600 dark:text-gray-400 text-base mb-8 font-medium leading-relaxed">
+                {t.instructionModalDesc}
+              </p>
+              
               <div className="space-y-6">
                 <div className="bg-indigo-50/50 dark:bg-indigo-900/20 p-6 rounded-3xl border border-indigo-100 dark:border-indigo-800/50">
                   <h3 className="font-extrabold text-indigo-900 dark:text-indigo-300 mb-4 flex items-center gap-2 text-xl">
@@ -1069,12 +1089,16 @@ export default function App() {
                   </ol>
                 </div>
               </div>
+              
               <div className="mt-10 text-center">
-                <button onClick={() => setShowInstructions(false)} className="px-10 py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">{t.gotIt}</button>
+                <button onClick={() => setShowInstructions(false)} className="px-10 py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">
+                  {t.gotIt}
+                </button>
               </div>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

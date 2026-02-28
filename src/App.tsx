@@ -33,11 +33,11 @@ const dict: Record<string, any> = {
     openScanner: "Otwórz skaner QR",
     pinPlaceholder: "Kod PIN...",
     orTraditionally: "Lub tradycyjnie",
-    testMode: "Tryb Testowy (Wygeneruj)",
+    testMode: "Tryb Testowy (Mieszaj dane)",
     searchParams: "Parametry wyszukiwania",
     distLabel: "Byliśmy od siebie bliżej niż...",
     timeLabel: "W oknie czasowym wynoszącym...",
-    presetParty: "Klub/Budynek",
+    presetParty: "Club/Building",
     presetFest: "Festiwal/Okolica",
     presetCity: "To samo miasto",
     analyzeBtn: "Odkryjcie prawdę",
@@ -100,7 +100,7 @@ const dict: Record<string, any> = {
     openScanner: "Open QR Scanner",
     pinPlaceholder: "PIN code...",
     orTraditionally: "Or traditionally",
-    testMode: "Test Mode (Generate)",
+    testMode: "Test Mode (Mix data)",
     searchParams: "Search parameters",
     distLabel: "We were closer than...",
     timeLabel: "In a time window of...",
@@ -400,7 +400,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
-      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Bezwzględnie odróżniasz klimat miejsc (lotnisko, park, klub) od samej technicznej infrastruktury drogowej." }] }
+      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Respond in requested language." }] }
     };
 
     try {
@@ -420,7 +420,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const generateLongStory = async () => {
     setIsLoadingLong(true);
     let promptParams = lang === 'pl' 
-      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki, lekko tajemniczy."
+      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki."
       : "Write 4-5 sentences of an intriguing, romantic story in English about how they might have passed each other here.";
 
     const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło (Trzymaj się DOKŁADNIE tej lokalizacji i charakteru miejsca): ${shortStory}.`;
@@ -527,19 +527,16 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
     
     setIsDownloading(true);
     try {
-      // Dodajemy klasę, która narzuca sztywne wymiary (540x960) pod idealne proporcje 9:16
       element.classList.add('exporting-card');
-      
-      // Delikatne opóźnienie dla przeglądarki na przemalowanie układu do nowych proporcji
       await new Promise(r => setTimeout(r, 200)); 
 
       const canvas = await win.html2canvas(element, { 
-        backgroundColor: null, // Używamy naszego gradientu z CSS
-        scale: 3, // Bardzo wysoka rozdzielczość na social media
+        backgroundColor: null, 
+        scale: 3, 
         useCORS: true,
         windowWidth: 540,
         width: 540,
-        height: 960 // Sztywne wymiary IG Story
+        height: 960 
       });
       element.classList.remove('exporting-card');
       
@@ -552,15 +549,11 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
         const file = new File([blob], fileName, { type: 'image/png' });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          // TIP: Wysyłając TYLKO plik, wymuszamy na mobilkach UI wyboru aplikacji zdjęciowych (IG, Snapchat)
-          await navigator.share({
-            files: [file]
-          });
+          await navigator.share({ files: [file] });
         } else {
           throw new Error("Web Share API not supported");
         }
       } catch (shareErr) {
-        // Fallback dla desktopu
         const link = document.createElement('a');
         link.download = fileName;
         link.href = image;
@@ -829,16 +822,55 @@ export default function App() {
     document.body.removeChild(textArea);
   };
 
+  // ULEPSZONY GENERATOR DANYCH TESTOWYCH (Generuje realistyczną historię z potencjalnymi trafieniami)
   const generateFakePartner = (sourceData: any[], setTargetFn: React.Dispatch<React.SetStateAction<any[] | null>>) => {
     if (!sourceData || sourceData.length === 0) return;
-    const basePt = sourceData[Math.floor(sourceData.length * Math.random())];
-    let fakePath: any[] = []; let curLat = basePt.lat + 0.005; let curLon = basePt.lon + 0.005;
-    for (let i = -60; i <= 60; i++) {
-      const t = basePt.time + (i * 60000);
-      if (i === 0) { curLat = basePt.lat + 0.0001; curLon = basePt.lon + 0.0001; } else { curLat += (Math.random() - 0.5) * 0.001; curLon += (Math.random() - 0.5) * 0.001; }
-      fakePath.push({ time: t, lat: curLat, lon: curLon });
+    
+    let fakePath: any[] = [];
+    
+    // Tworzymy kilka "sesji ruchu" (tras) rozrzuconych w czasie
+    const numSessions = 8;
+    
+    for (let s = 0; s < numSessions; s++) {
+      // Wybieramy bazowy punkt z Twojej historii
+      const basePt = sourceData[Math.floor(Math.random() * sourceData.length)];
+      
+      // Decydujemy czy ta sesja ma być potencjalnym trafieniem (ok. 50% szans)
+      const isCoincidence = Math.random() < 0.5;
+      
+      // Jeśli to nie zbieg okoliczności, przesuwamy czas i miejsce o dużą wartość
+      const timeJitter = isCoincidence ? 0 : (Math.random() - 0.5) * 1000 * 60 * 60 * 24 * 30; // +/- 30 dni
+      const posJitter = isCoincidence ? 0 : (Math.random() - 0.5) * 5; // +/- 5 stopni (setki km)
+      
+      let curLat = basePt.lat + posJitter;
+      let curLon = basePt.lon + posJitter;
+      const startTime = basePt.time + timeJitter;
+
+      // Generujemy krótką trasę (ok. 30-60 min ruchu)
+      const sessionLength = 15 + Math.floor(Math.random() * 30);
+      for (let i = 0; i < sessionLength; i++) {
+        // Co minutę dodajemy punkt
+        const t = startTime + (i * 60000);
+        
+        // Jeśli to ma być trafienie, jeden z punktów w środku sesji ustawiamy bardzo blisko
+        if (isCoincidence && i === Math.floor(sessionLength / 2)) {
+           // Prawie identyczne współrzędne w tym samym czasie
+           fakePath.push({ time: t, lat: basePt.lat + 0.0001, lon: basePt.lon + 0.0001 });
+        } else {
+           // Losowy ruch "pijaka"
+           curLat += (Math.random() - 0.5) * 0.002;
+           curLon += (Math.random() - 0.5) * 0.002;
+           fakePath.push({ time: t, lat: curLat, lon: curLon });
+        }
+      }
     }
-    setTargetFn(fakePath); setResults(null); setProgress(0);
+    
+    // Sortujemy chronologicznie
+    fakePath.sort((a, b) => a.time - b.time);
+    
+    setTargetFn(fakePath);
+    setResults(null);
+    setProgress(0);
   };
 
   const applyPreset = (dist: number, time: number) => {
@@ -944,42 +976,8 @@ export default function App() {
                   {results.length > 0 ? <><Sparkles className="text-rose-500"/> {t.foundMatches}</> : t.noMatches}
                 </h2>
                 <div className="space-y-6">
-                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD (Spotify Wrapped Style) */}
-                  <style>{`
-                    .exporting-card .hide-on-export { display: none !important; }
-                    .exporting-card .watermark-only { display: block !important; }
-                    .exporting-card {
-                      width: 540px !important;
-                      height: 960px !important;
-                      background: radial-gradient(circle at 10% 20%, #1e1b4b 0%, #0f172a 100%) !important;
-                      color: #f8fafc !important;
-                      border-radius: 40px !important;
-                      padding: 60px 40px !important;
-                      border: none !important;
-                      box-shadow: none !important;
-                      display: flex !important;
-                      flex-direction: column !important;
-                      justify-content: center !important;
-                      align-items: center !important;
-                      text-align: center !important;
-                      box-sizing: border-box !important;
-                    }
-                    .exporting-card .export-container-reset { padding: 0 !important; margin: 0 !important; width: 100% !important; background: transparent !important; border: none !important; }
-                    .exporting-card .export-header { display: block !important; font-size: 1.1rem !important; font-weight: 900 !important; color: #f472b6 !important; letter-spacing: 0.3em !important; text-transform: uppercase !important; margin-bottom: 40px !important; }
-                    .exporting-card .export-row { flex-direction: column !important; align-items: center !important; border: none !important; margin-bottom: 30px !important; }
-                    .exporting-card .export-date-block { align-items: center !important; margin-bottom: 15px !important; }
-                    .exporting-card .date-text { font-size: 3.8rem !important; line-height: 1 !important; margin-bottom: 5px !important; color: #fff !important; font-weight: 900 !important; }
-                    .exporting-card .time-text { font-size: 1.4rem !important; color: #94a3b8 !important; justify-content: center !important; }
-                    .exporting-card .export-distance-block { padding: 0 !important; margin-top: 5px !important; width: 100% !important; display: flex !important; justify-content: center !important; }
-                    .exporting-card .distance-badge { background: rgba(244, 114, 182, 0.15) !important; border-color: rgba(244, 114, 182, 0.3) !important; color: #f472b6 !important; font-size: 1.2rem !important; padding: 10px 24px !important; border-radius: 999px !important; font-weight: 800 !important; width: fit-content !important; }
-                    .exporting-card .export-map-container { width: 100% !important; margin: 30px 0 !important; }
-                    .exporting-card .export-map-frame { height: 260px !important; border: 2px solid rgba(255,255,255,0.1) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important; }
-                    .exporting-card .ai-section-export { border: none !important; width: 100% !important; margin-top: 10px !important; padding-top: 0 !important; }
-                    .exporting-card .story-content-container { background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
-                    .exporting-card .ai-title { display: none !important; }
-                    .exporting-card .ai-text { font-size: 1.3rem !important; line-height: 1.5 !important; color: #e2e8f0 !important; font-style: italic !important; text-align: center !important; font-weight: 500 !important; max-width: 400px !important; }
-                    .exporting-card .icon-sparkle-bg { display: none !important; }
-                  `}</style>
+                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
+                  <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
                   
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     return <MatchCard key={i} match={match} lang={lang} t={t} />;
@@ -1058,15 +1056,15 @@ export default function App() {
                 {peerStatus === 'hosting' ? (
                    <div className="text-center w-full animate-fade-in flex flex-col items-center">
                      <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><X size={20} /></button>
-                     <h3 className="font-extrabold text-2xl text-indigo-900 dark:text-indigo-300 mb-3 flex items-center justify-center gap-2"><QrCode size={24} className="text-indigo-600 dark:text-indigo-400"/> {t.inviteGuest}</h3>
-                     <p className="text-sm text-indigo-700 dark:text-indigo-400 font-medium mb-6">{t.scanOrPin}</p>
+                     <h3 className="font-extrabold text-2xl text-indigo-900 dark:text-indigo-300 mb-3 flex items-center justify-center gap-2"><QrCode size={24} className="text-indigo-600 dark:text-indigo-400"/> Zaproś Gościa</h3>
+                     <p className="text-sm text-indigo-700 dark:text-indigo-400 font-medium mb-6">Zeskanuj kod telefonem lub podaj PIN.</p>
                      {joinLink && (
                        <div className="bg-white p-3 rounded-2xl mb-6 shadow-md border border-indigo-100">
                           <img src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinLink)}`} alt="QR Code" className="w-[160px] h-[160px]" />
                        </div>
                      )}
                      <div className="bg-white dark:bg-gray-900 border border-indigo-100 dark:border-gray-700 rounded-2xl p-4 mb-6 w-full shadow-sm">
-                        <div className="text-xs font-bold text-indigo-400 dark:text-indigo-500 mb-1 uppercase tracking-wider">{t.roomCode}</div>
+                        <div className="text-xs font-bold text-indigo-400 dark:text-indigo-500 mb-1 uppercase tracking-wider">Kod pokoju</div>
                         <div className="text-4xl font-mono font-black text-indigo-900 dark:text-indigo-300 tracking-[0.25em]">{peerId}</div>
                      </div>
                      <button onClick={copyLink} className="flex w-full max-w-[200px] items-center justify-center gap-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-3 rounded-full transition-all shadow-md active:scale-95">
@@ -1151,7 +1149,7 @@ export default function App() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 mb-16 w-full max-w-sm justify-center">
-              <button onClick={startAnalysis} disabled={!fileA || !fileB || isProcessing} className="w-full py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold text-lg shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-1">
+              <button onClick={startAnalysis} disabled={!fileA || !fileB || isProcessing} className="w-full py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold text-lg shadow-xl transition-all disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-1 active:translate-y-0">
                 {isProcessing ? <Activity className="animate-spin" size={24} /> : <Play fill="currentColor" size={20} />} 
                 {isProcessing ? t.analyzingBtn : t.analyzeBtn}
               </button>
@@ -1175,6 +1173,43 @@ export default function App() {
                 
                 {/* PAGINACJA WYNIKÓW I KARTY */}
                 <div className="space-y-6 relative z-10">
+                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD (Spotify Wrapped Style) */}
+                  <style>{`
+                    .exporting-card .hide-on-export { display: none !important; }
+                    .exporting-card .watermark-only { display: block !important; }
+                    .exporting-card {
+                      width: 540px !important;
+                      height: 960px !important;
+                      background: radial-gradient(circle at 10% 20%, #1e1b4b 0%, #0f172a 100%) !important;
+                      color: #f8fafc !important;
+                      border-radius: 40px !important;
+                      padding: 60px 40px !important;
+                      border: none !important;
+                      box-shadow: none !important;
+                      display: flex !important;
+                      flex-direction: column !important;
+                      justify-content: center !important;
+                      align-items: center !important;
+                      text-align: center !important;
+                      box-sizing: border-box !important;
+                    }
+                    .exporting-card .export-container-reset { padding: 0 !important; margin: 0 !important; width: 100% !important; background: transparent !important; border: none !important; }
+                    .exporting-card .export-header { display: block !important; font-size: 1.1rem !important; font-weight: 900 !important; color: #f472b6 !important; letter-spacing: 0.3em !important; text-transform: uppercase !important; margin-bottom: 40px !important; }
+                    .exporting-card .export-row { flex-direction: column !important; align-items: center !important; border: none !important; margin-bottom: 30px !important; }
+                    .exporting-card .export-date-block { align-items: center !important; margin-bottom: 15px !important; }
+                    .exporting-card .date-text { font-size: 3.8rem !important; line-height: 1 !important; margin-bottom: 5px !important; color: #fff !important; font-weight: 900 !important; }
+                    .exporting-card .time-text { font-size: 1.4rem !important; color: #94a3b8 !important; justify-content: center !important; }
+                    .exporting-card .export-distance-block { padding: 0 !important; margin-top: 5px !important; width: 100% !important; display: flex !important; justify-content: center !important; }
+                    .exporting-card .distance-badge { background: rgba(244, 114, 182, 0.15) !important; border-color: rgba(244, 114, 182, 0.3) !important; color: #f472b6 !important; font-size: 1.2rem !important; padding: 10px 24px !important; border-radius: 999px !important; font-weight: 800 !important; width: fit-content !important; }
+                    .exporting-card .export-map-container { width: 100% !important; margin: 30px 0 !important; }
+                    .exporting-card .export-map-frame { height: 260px !important; border: 2px solid rgba(255,255,255,0.1) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important; }
+                    .exporting-card .ai-section-export { border: none !important; width: 100% !important; margin-top: 10px !important; padding-top: 0 !important; }
+                    .exporting-card .story-content-container { background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
+                    .exporting-card .ai-title { display: none !important; }
+                    .exporting-card .ai-text { font-size: 1.3rem !important; line-height: 1.5 !important; color: #e2e8f0 !important; font-style: italic !important; text-align: center !important; font-weight: 500 !important; max-width: 400px !important; }
+                    .exporting-card .icon-sparkle-bg { display: none !important; }
+                  `}</style>
+                  
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     return <MatchCard key={i} match={match} lang={lang} t={t} />;
                   })}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Download, Share2 } from 'lucide-react';
+import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Share2 } from 'lucide-react';
 
 // Deklaracja globalnych zmiennych
 declare global {

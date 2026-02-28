@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Share2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Share2, Compass, Zap, Flame, Star, Edit3, Calendar } from 'lucide-react';
 
-// Deklaracja globalnych zmiennych
+// Deklaracja globalnych zmiennych i naprawa typów dla środowiska
 declare global {
   interface Window { L: any; Peer: any; tailwind: any; html2canvas: any; }
+  interface ImportMetaEnv { readonly VITE_GEMINI_API_KEY: string; }
+  interface ImportMeta { readonly env: ImportMetaEnv; }
 }
 
 // ============================================================================
@@ -33,11 +35,11 @@ const dict: Record<string, any> = {
     openScanner: "Otwórz skaner QR",
     pinPlaceholder: "Kod PIN...",
     orTraditionally: "Lub tradycyjnie",
-    testMode: "Tryb Testowy (Mieszaj dane)",
+    testMode: "Tryb Testowy (Wygeneruj)",
     searchParams: "Parametry wyszukiwania",
     distLabel: "Byliśmy od siebie bliżej niż...",
     timeLabel: "W oknie czasowym wynoszącym...",
-    presetParty: "Club/Building",
+    presetParty: "Klub/Budynek",
     presetFest: "Festiwal/Okolica",
     presetCity: "To samo miasto",
     analyzeBtn: "Odkryjcie prawdę",
@@ -75,7 +77,20 @@ const dict: Record<string, any> = {
     step4: "Kliknij ikonę menu (prawy górny róg) i \"Ustawienia i prywatność\".",
     step5: "Zjedź na dół i kliknij \"Eksportuj dane osi czasu\".",
     step6: "Gotowy plik wgraj tutaj na stronie!",
-    gotIt: "Wszystko jasne, działamy!"
+    gotIt: "Wszystko jasne, działamy!",
+    destinyTitle: "Wskaźnik Przeznaczenia",
+    destinyDesc: "Moc Waszego spotkania zapisana w gwiazdach i GPS.",
+    hotspotsTitle: "Wspólne Hotspoty",
+    hotspotsDesc: "Miejsca, które oboje kochacie (nawet jeśli bywacie tam w inne dni).",
+    closestMissTitle: "Najbliższe Minięcie",
+    closestMissDesc: "To był ten moment. Byliście niemal na wyciągnięcie ręki.",
+    labelPlaceholder: "Nadaj nazwę (np. Ten koncert...)",
+    premiumUnlock: "Odblokuj pełną historię (Premium)",
+    timelineTitle: "Wasza Wspólna Oś Czasu",
+    constellationTitle: "Konstelacja Przeznaczenia",
+    statsTitle: "Wasze Profile Podróżnika",
+    statsZones: "Odwiedzone strefy",
+    statsPoints: "Punkty trasy",
   },
   en: {
     secureBadge: "Secure. Data vanishes when you close the tab.",
@@ -100,7 +115,7 @@ const dict: Record<string, any> = {
     openScanner: "Open QR Scanner",
     pinPlaceholder: "PIN code...",
     orTraditionally: "Or traditionally",
-    testMode: "Test Mode (Mix data)",
+    testMode: "Test Mode (Generate)",
     searchParams: "Search parameters",
     distLabel: "We were closer than...",
     timeLabel: "In a time window of...",
@@ -142,12 +157,25 @@ const dict: Record<string, any> = {
     step4: "Tap the menu icon (top right) and \"Settings and privacy\".",
     step5: "Scroll down and tap \"Export Timeline data\".",
     step6: "Upload the generated file here on the site!",
-    gotIt: "Got it, let's go!"
+    gotIt: "Got it, let's go!",
+    destinyTitle: "Destiny Score",
+    destinyDesc: "The strength of your encounter in stars and GPS.",
+    hotspotsTitle: "Common Hotspots",
+    hotspotsDesc: "Places you both frequent, even on different days.",
+    closestMissTitle: "The Closest Miss",
+    closestMissDesc: "This was it. You were almost within reach.",
+    labelPlaceholder: "Name this (e.g. That concert...)",
+    premiumUnlock: "Unlock full story (Premium)",
+    timelineTitle: "Your Shared Timeline",
+    constellationTitle: "Fate Constellation",
+    statsTitle: "Traveler Profiles",
+    statsZones: "Visited zones",
+    statsPoints: "Route points",
   }
 };
 
 // ============================================================================
-// WEB WORKER
+// WEB WORKER: Silnik analizy (Statystyki, Hotspoty, Minięcia)
 // ============================================================================
 const workerScript = `
   function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
@@ -164,18 +192,39 @@ const workerScript = `
     const { maxDistanceMeters, maxTimeDiffMs } = config;
 
     self.postMessage({ type: 'STATUS', msgId: 'workerInput' });
+    
+    // --- 1. STATYSTYKI ---
+    const getStats = (data) => {
+      const zones = new Set();
+      data.forEach(pt => zones.add(pt.lat.toFixed(2) + ',' + pt.lon.toFixed(2)));
+      return { pointCount: data.length, zoneCount: zones.size };
+    };
+    const statsA = getStats(dataA);
+    const statsB = getStats(dataB);
+
+    // --- 2. GRUPOWANIE DO BUCKETÓW & HOTSPOTÓW ---
+    const zonesA = new Set();
     const bucketsA = {};
     dataA.forEach(pt => {
       const day = new Date(pt.time).toISOString().split('T')[0];
       if (!bucketsA[day]) bucketsA[day] = [];
       bucketsA[day].push(pt);
+      zonesA.add(pt.lat.toFixed(3) + ',' + pt.lon.toFixed(3));
     });
 
     const matches = [];
+    const hotspotMap = {};
+
     self.postMessage({ type: 'STATUS', msgId: 'workerMatch' });
     
     dataB.forEach((ptB, index) => {
       if (index % 5000 === 0) self.postMessage({ type: 'PROGRESS', percent: Math.round((index / dataB.length) * 100) });
+      
+      const geoKey = ptB.lat.toFixed(3) + ',' + ptB.lon.toFixed(3);
+      if (zonesA.has(geoKey)) {
+        hotspotMap[geoKey] = (hotspotMap[geoKey] || 0) + 1;
+      }
+
       const dayB = new Date(ptB.time).toISOString().split('T')[0];
       
       if (bucketsA[dayB]) {
@@ -198,7 +247,22 @@ const workerScript = `
         if (m.time - lastMatchTime > 30 * 60 * 1000) { uniqueMatches.push(m); lastMatchTime = m.time; }
     });
 
-    self.postMessage({ type: 'DONE', matches: uniqueMatches });
+    const hotspots = Object.entries(hotspotMap)
+      .map(([key, count]) => {
+        const [lat, lon] = key.split(',').map(Number);
+        return { lat, lon, weight: count };
+      })
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 8);
+
+    let destinyScore = 0;
+    if (uniqueMatches.length > 0 || hotspots.length > 0) {
+      destinyScore = Math.min(100, (uniqueMatches.length * 15) + (hotspots.length * 5));
+      uniqueMatches.forEach(m => { if (m.distance < 15) destinyScore += 10; });
+      destinyScore = Math.min(100, destinyScore);
+    }
+
+    self.postMessage({ type: 'DONE', matches: uniqueMatches, destinyScore, hotspots, stats: { A: statsA, B: statsB } });
   };
 `;
 
@@ -252,8 +316,113 @@ const normalizeData = (data: any): any[] => {
 };
 
 // ============================================================================
-// KOMPONENT MINI-MAPY (używany w kartach i eksporcie)
+// KOMPONENTY UI
 // ============================================================================
+
+const HotspotMap = ({ hotspots }: { hotspots: any[] }) => {
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const checkL = setInterval(() => {
+      if ((window as any).L && mapRef.current) {
+        clearInterval(checkL);
+        const L = (window as any).L;
+        const map = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([hotspots[0].lat, hotspots[0].lon], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        hotspots.forEach(h => {
+          const color = h.weight > 10 ? '#ef4444' : h.weight > 5 ? '#f97316' : '#3b82f6';
+          L.circle([h.lat, h.lon], { color: 'transparent', fillColor: color, fillOpacity: 0.1, radius: 300 + (h.weight * 20) }).addTo(map);
+          L.circle([h.lat, h.lon], { color: 'transparent', fillColor: color, fillOpacity: 0.2, radius: 200 + (h.weight * 15) }).addTo(map);
+          L.circle([h.lat, h.lon], { color: color, weight: 2, fillColor: color, fillOpacity: 0.5, radius: 100 + (h.weight * 10) }).addTo(map);
+        });
+      }
+    }, 100);
+    return () => clearInterval(checkL);
+  }, [hotspots]);
+
+  return <div ref={mapRef} className="w-full h-full bg-gray-100 dark:bg-slate-800" />;
+};
+
+const ConvergingPathsIntro = ({ onComplete }: { onComplete: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(onComplete, 4000);
+    return () => clearTimeout(timer);
+  }, [onComplete]);
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
+      <div className="relative w-full max-w-lg h-96">
+        <svg className="w-full h-full" viewBox="0 0 400 400">
+          <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style={{stopColor:'#f43f5e', stopOpacity:1}} />
+              <stop offset="100%" style={{stopColor:'#881337', stopOpacity:1}} />
+            </linearGradient>
+            <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style={{stopColor:'#6366f1', stopOpacity:1}} />
+              <stop offset="100%" style={{stopColor:'#312e81', stopOpacity:1}} />
+            </linearGradient>
+          </defs>
+          <path className="animate-path-flow" d="M 50 50 Q 150 150 200 200" stroke="url(#grad1)" strokeWidth="3" fill="transparent" strokeDasharray="5,5" />
+          <path className="animate-path-flow-reverse" d="M 350 350 Q 250 250 200 200" stroke="url(#grad2)" strokeWidth="3" fill="transparent" strokeDasharray="5,5" />
+          <circle cx="200" cy="200" r="10" fill="#fb7185" className="animate-ping" />
+          <circle cx="200" cy="200" r="6" fill="#fb7185" />
+        </svg>
+      </div>
+      <div className="text-center mt-8 animate-pulse">
+        <h2 className="text-2xl font-black text-white tracking-widest uppercase">Zbieżność dróg...</h2>
+        <p className="text-slate-500 font-medium">Analizujemy lata Waszych wspomnień</p>
+      </div>
+      <style>{`
+        @keyframes pathFlow { to { stroke-dashoffset: -100; } }
+        .animate-path-flow { animation: pathFlow 5s linear infinite; }
+        .animate-path-flow-reverse { animation: pathFlow 5s linear infinite; }
+      `}</style>
+    </div>
+  );
+};
+
+const ConstellationView = ({ matches, t }: { matches: any[], t: any }) => {
+  return (
+    <div className="relative bg-slate-950 rounded-[3rem] p-10 h-[500px] overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center justify-center">
+      <div className="absolute inset-0 opacity-40 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] pointer-events-none"></div>
+      <div className="relative w-full h-full">
+        {matches.map((m, i) => (
+          <div 
+            key={i}
+            className="absolute rounded-full bg-white shadow-[0_0_10px_white] animate-pulse"
+            style={{
+              left: `${(m.lon % 1) * 100}%`,
+              top: `${(m.lat % 1) * 100}%`,
+              width: `${Math.max(2, 6 - m.distance/10)}px`,
+              height: `${Math.max(2, 6 - m.distance/10)}px`,
+              animationDelay: `${i * 0.1}s`
+            }}
+          />
+        ))}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          {matches.length > 1 && matches.map((m, i) => i < matches.length - 1 && (
+            <line 
+              key={i}
+              x1={`${(m.lon % 1) * 100}%`}
+              y1={`${(m.lat % 1) * 100}%`}
+              x2={`${(matches[i+1].lon % 1) * 100}%`}
+              y2={`${(matches[i+1].lat % 1) * 100}%`}
+              stroke="white"
+              strokeOpacity="0.1"
+              strokeWidth="1"
+            />
+          ))}
+        </svg>
+      </div>
+      <div className="absolute bottom-8 text-center z-10">
+        <h3 className="text-white font-black uppercase tracking-widest text-lg">{t.constellationTitle}</h3>
+        <p className="text-slate-500 text-sm">{t.constellationDesc}</p>
+      </div>
+    </div>
+  );
+};
+
 const MiniMap = ({ lat, lon }: { lat: number, lon: number }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   
@@ -263,19 +432,10 @@ const MiniMap = ({ lat, lon }: { lat: number, lon: number }) => {
         clearInterval(checkL);
         const win = window as any;
         const map = win.L.map(mapRef.current, {
-          center: [lat, lon],
-          zoom: 15,
-          zoomControl: false,
-          dragging: false,
-          touchZoom: false,
-          scrollWheelZoom: false,
-          doubleClickZoom: false,
-          attributionControl: false
+          center: [lat, lon], zoom: 15, zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false, attributionControl: false
         });
         win.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         win.L.marker([lat, lon]).addTo(map);
-        
-        // Zapewnij, że mapa jest poprawnie narysowana
         setTimeout(() => map.invalidateSize(), 200);
       }
     }, 100);
@@ -283,15 +443,12 @@ const MiniMap = ({ lat, lon }: { lat: number, lon: number }) => {
   }, [lat, lon]);
 
   return (
-    <div className="w-full h-48 sm:h-56 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 relative z-0 export-map-frame">
-      <div ref={mapRef} className="w-full h-full bg-gray-100 dark:bg-gray-800" />
+    <div className="w-full h-48 sm:h-56 rounded-2xl overflow-hidden border border-gray-100 dark:border-slate-700 relative z-0 export-map-frame">
+      <div ref={mapRef} className="w-full h-full bg-gray-50 dark:bg-slate-800" />
     </div>
   );
 };
 
-// ============================================================================
-// KOMPONENT MAPY GŁÓWNEJ
-// ============================================================================
 const MapView = ({ matches }: { matches: any[] }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstance = useRef<any>(null);
@@ -330,14 +487,14 @@ const MapView = ({ matches }: { matches: any[] }) => {
 
   if (!matches || matches.length === 0) return null;
   return (
-    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm relative z-0 hide-on-export">
-      <div ref={mapRef} className="w-full h-[400px] bg-gray-50 dark:bg-gray-800" />
+    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 dark:border-slate-700 shadow-sm relative z-0 hide-on-export">
+      <div ref={mapRef} className="w-full h-[400px] bg-gray-50 dark:bg-slate-800" />
     </div>
   );
 };
 
 // ============================================================================
-// KOMPONENT AI (Wyłącznie generowanie tekstu)
+// KOMPONENT AI
 // ============================================================================
 const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) => {
   const [shortStory, setShortStory] = useState<string | null>(null);
@@ -346,13 +503,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [isLoadingLong, setIsLoadingLong] = useState<boolean>(false);
   const [sources, setSources] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Zaktualizowany odczyt klucza API dla Cloudflare
-  let apiKey = "";
-  try {
-    // @ts-ignore
-    apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
-  } catch (e) {}
+  const [customLabel, setCustomLabel] = useState("");
 
   const dateStr = new Date(match.time).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
   const timeStr = new Date(match.time).toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' });
@@ -362,11 +513,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     for (let i = 0; i < retries; i++) {
       try {
         const res = await fetch(url, options);
-        if (!res.ok) {
-           const errBody = await res.text();
-           console.error("Gemini API Error:", errBody);
-           throw new Error(`HTTP error! status: ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return await res.json();
       } catch (e) {
         if (i === retries - 1) throw e;
@@ -376,7 +523,16 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     }
   };
 
+  const getApiKey = () => {
+    try {
+      return (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
+    } catch (e) {
+      return "";
+    }
+  };
+
   const generateShortStory = async () => {
+    const apiKey = getApiKey();
     if (!apiKey) {
       setErrorMsg(lang === 'pl' ? "Błąd: Brak klucza API." : "Error: Missing API Key.");
       return;
@@ -388,7 +544,6 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       ? "Napisz maksymalnie 2 krótkie zdania podsumowania po polsku, gdzie się minęli na podstawie tych współrzędnych."
       : "Write max 2 short sentences in English summarizing where they crossed paths based on these coordinates.";
       
-    // ZRESTYKCYJNY PROMPT DLA WIĘKSZEJ PRECYZJI I LOKALIZACJI TYPU AIRPORT / PARK
     const prompt = `Data: ${dateStr}, Godzina: ${timeStr}. Lat: ${match.lat}, Lon: ${match.lon}. Dystans: ${match.distance}m. 
     WAŻNE: Jesteś asystentem podróży. Zidentyfikuj DOKŁADNY charakter miejsca. 
     1. Jeśli punkt jest blisko lotniska (np. Chopina, Balice), skup się na podróżach, samolotach, wspólnym locie lub pożegnaniach. 
@@ -400,7 +555,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
-      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Respond in requested language." }] }
+      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Bezwzględnie odróżniasz klimat miejsc od samej technicznej infrastruktury drogowej." }] }
     };
 
     try {
@@ -418,9 +573,10 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   const generateLongStory = async () => {
+    const apiKey = getApiKey();
     setIsLoadingLong(true);
     let promptParams = lang === 'pl' 
-      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki."
+      ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki, lekko tajemniczy."
       : "Write 4-5 sentences of an intriguing, romantic story in English about how they might have passed each other here.";
 
     const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło (Trzymaj się DOKŁADNIE tej lokalizacji i charakteru miejsca): ${shortStory}.`;
@@ -446,7 +602,24 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   return (
-    <div className="mt-5 pt-5 relative z-10 w-full border-t border-gray-100 dark:border-gray-800 ai-section-export">
+    <div className="mt-5 pt-5 relative z-10 w-full border-t border-gray-100 dark:border-slate-800 ai-section-export">
+      
+      <div className="flex gap-2 mb-4 hide-on-export">
+        <Edit3 size={14} className="text-gray-400 mt-1" />
+        <input 
+          value={customLabel} 
+          onChange={(e) => setCustomLabel(e.target.value)} 
+          placeholder={t.labelPlaceholder} 
+          className="bg-transparent border-b border-gray-200 dark:border-slate-700 text-sm focus:border-rose-400 outline-none flex-1 pb-1 text-gray-800 dark:text-gray-200"
+        />
+      </div>
+
+      {customLabel && (
+        <div className="mb-3 text-rose-500 font-black tracking-wider uppercase text-xs hidden export-label-only relative z-10">
+           {customLabel}
+        </div>
+      )}
+
       {!shortStory && !isLoadingShort && (
         <button onClick={generateShortStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full transition-colors border border-indigo-200 dark:border-indigo-800/50 font-medium w-full sm:w-auto justify-center group hide-on-export">
           <Sparkles size={16} className="text-indigo-500 group-hover:animate-spin" />
@@ -465,15 +638,16 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       )}
 
       {shortStory && (
-        <div className="story-content-container bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-5 rounded-2xl border border-indigo-100/50 dark:border-indigo-800/30 shadow-sm relative overflow-hidden transition-all">
+        <div className="story-content-container bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-slate-900/50 dark:to-slate-800/50 p-5 rounded-2xl border border-indigo-100/50 dark:border-slate-700 shadow-sm relative overflow-hidden transition-all">
           <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none icon-sparkle-bg"><Sparkles size={64} /></div>
+
           <div className="flex items-center gap-2 mb-3 text-indigo-800 dark:text-indigo-300 font-bold text-sm relative z-10 ai-title">
             <MapPin size={16} className="text-indigo-600 dark:text-indigo-400" /> {t.aiMapPoint}
           </div>
           <p className="text-sm text-gray-800 dark:text-gray-200 font-medium leading-relaxed relative z-10 ai-text">{shortStory}</p>
           
           {!longStory && !isLoadingLong && (
-             <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10 hide-on-export">
+             <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10 hide-on-export">
                 <span className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                   <Lock size={12} className="text-amber-500" /> {t.aiPremiumLock}
                 </span>
@@ -483,12 +657,12 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
              </div>
           )}
           {isLoadingLong && (
-            <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-800/50 flex flex-col gap-2 text-sm text-rose-500 dark:text-rose-400 animate-pulse font-bold relative z-10 hide-on-export">
+            <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-slate-700 flex flex-col gap-2 text-sm text-rose-500 dark:text-rose-400 animate-pulse font-bold relative z-10 hide-on-export">
               <div className="flex items-center gap-2"><Sparkles size={16} /> {t.aiGenerating}</div>
             </div>
           )}
           {longStory && (
-            <div className="mt-5 pt-5 border-t border-indigo-200 dark:border-indigo-800/50 animate-fade-in relative z-10 generated-long-story">
+            <div className="mt-5 pt-5 border-t border-indigo-200 dark:border-slate-700 animate-fade-in relative z-10 generated-long-story">
               <div className="flex items-center gap-2 mb-3 text-rose-600 dark:text-rose-400 font-bold text-sm ai-title">
                 <Sparkles size={16} /> {t.aiStoryTitle}
               </div>
@@ -496,11 +670,11 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
             </div>
           )}
           {sources.length > 0 && (
-            <div className="mt-5 pt-3 border-t border-indigo-200/50 dark:border-indigo-800/50 text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-2 relative z-10 hide-on-export">
+            <div className="mt-5 pt-3 border-t border-indigo-200/50 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-2 relative z-10 hide-on-export">
               <span className="font-semibold text-gray-600 dark:text-gray-300">{t.aiSources}</span>
               <div className="flex flex-wrap gap-2">
                 {sources.slice(0, 3).map((s: any, idx: number) => (
-                  <a key={idx} href={s.uri} target="_blank" rel="noreferrer" className="bg-white dark:bg-gray-800 px-2 py-1 rounded-md text-indigo-600 dark:text-indigo-400 shadow-sm border border-indigo-100 dark:border-gray-700 hover:underline inline-block truncate max-w-[250px]" title={s.title}>🔗 {s.title || "Link"}</a>
+                  <a key={idx} href={s.uri} target="_blank" rel="noreferrer" className="bg-white dark:bg-slate-800 px-2 py-1 rounded-md text-indigo-600 dark:text-indigo-400 shadow-sm border border-indigo-100 dark:border-slate-700 hover:underline inline-block truncate max-w-[250px]" title={s.title}>🔗 {s.title || "Link"}</a>
                 ))}
               </div>
             </div>
@@ -568,7 +742,7 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
   };
 
   return (
-    <div id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all group overflow-hidden w-full export-container-reset">
+    <div id={`story-card-${match.time}`} className="relative bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-slate-800 hover:shadow-md transition-all group overflow-hidden w-full export-container-reset">
       
       {/* NAGŁÓWEK TYLKO DLA EKSPORTU */}
       <div className="hidden export-header">
@@ -582,7 +756,7 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
       </div>
 
       {/* Kontener nagłówka wymuszający bezpieczny Flexbox przy renderowaniu Canvas */}
-      <div className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10 w-full export-row">
+      <div className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-4 relative z-10 w-full export-row">
         <div className="flex flex-col flex-1 min-w-0 export-date-block">
           <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 truncate date-text">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
           <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2 time-text">
@@ -605,7 +779,7 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
       <GeminiStory match={match} lang={lang} t={t} />
 
       {/* Przycisk udostępniania dostępny niezależnie od tego czy użyto AI */}
-      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-end relative z-10 hide-on-export">
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-800 flex justify-end relative z-10 hide-on-export">
         <button onClick={handleShare} disabled={isDownloading} className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:scale-105 transition-transform rounded-full font-bold shadow-lg w-full sm:w-auto active:scale-95 disabled:opacity-70 disabled:hover:scale-100">
            {isDownloading ? <Activity size={16} className="animate-spin" /> : <Share2 size={16} />} 
            {isDownloading ? t.downloading : t.shareStory}
@@ -614,7 +788,6 @@ const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => 
     </div>
   );
 };
-
 
 // ============================================================================
 // GŁÓWNA APLIKACJA REACT
@@ -630,8 +803,15 @@ export default function App() {
   const [errorB, setErrorB] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
-  const [statusMsgId, setStatusMsgId] = useState<string>('');
+  const [statusText, setStatusText] = useState<string>('');
+  
+  // Wyniki i Statystyki
   const [results, setResults] = useState<any[] | null>(null);
+  const [destinyScore, setDestinyScore] = useState<number>(0);
+  const [stats, setStats] = useState<any>(null);
+  const [hotspots, setHotspots] = useState<any[]>([]);
+  const [showIntro, setShowIntro] = useState<boolean>(false);
+
   const [visibleCount, setVisibleCount] = useState<number>(5); 
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
   
@@ -646,8 +826,6 @@ export default function App() {
   const [joinLink, setJoinLink] = useState<string>('');
   const [manualJoinCode, setManualJoinCode] = useState<string>(''); 
   const [copySuccess, setCopySuccess] = useState<boolean>(false); 
-  
-  // @ts-ignore
   const [peerError, setPeerError] = useState<string | null>(null);
   
   const [peerConnection, setPeerConnection] = useState<any>(null);
@@ -688,13 +866,16 @@ export default function App() {
     workerRef.current = new Worker(URL.createObjectURL(blob));
 
     workerRef.current.onmessage = (e: MessageEvent) => {
-      const { type, msgId, percent, matches } = e.data;
-      if (type === 'STATUS') setStatusMsgId(msgId);
+      const { type, msgId, percent, matches, destinyScore, stats, hotspots } = e.data;
+      if (type === 'STATUS') setStatusText(msgId);
       if (type === 'PROGRESS') setProgress(percent);
       if (type === 'DONE') {
         setResults(matches);
+        setDestinyScore(destinyScore);
+        setStats(stats);
+        setHotspots(hotspots);
         setIsProcessing(false);
-        setStatusMsgId('resultsReady');
+        setStatusText('Analiza zakończona!');
         setProgress(100);
       }
     };
@@ -713,13 +894,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (results && peerConnection && !isGuestMode) peerConnection.send({ type: 'RESULTS', data: results });
+    if (results && peerConnection && !isGuestMode) {
+      peerConnection.send({ 
+        type: 'RESULTS', 
+        data: results, 
+        destinyScore, 
+        stats, 
+        hotspots 
+      });
+    }
   }, [results, peerConnection, isGuestMode]);
 
   useEffect(() => {
     if (peerConnection && isGuestMode && fileA) {
       peerConnection.send({ type: 'GUEST_DATA', data: fileA });
-      setStatusMsgId('waitingForHost');
+      setStatusText('Dane przesłane bezpiecznie do Hosta...');
     }
   }, [fileA, peerConnection, isGuestMode]);
 
@@ -773,7 +962,15 @@ export default function App() {
     const conn = peerInstance.current.connect(hostId);
     conn.on('open', () => { setPeerConnection(conn); setPeerStatus('connected'); });
     conn.on('data', (payload: any) => {
-      if (payload.type === 'RESULTS') { setResults(payload.data); setIsProcessing(false); setProgress(100); setStatusMsgId('resultsReady'); }
+      if (payload.type === 'RESULTS') { 
+        setResults(payload.data); 
+        setDestinyScore(payload.destinyScore);
+        setStats(payload.stats);
+        setHotspots(payload.hotspots);
+        setIsProcessing(false); 
+        setProgress(100); 
+        setStatusText('Analiza zakończona!'); 
+      }
     });
   };
 
@@ -805,12 +1002,12 @@ export default function App() {
   const clearFile = (target: string) => {
     if (target === 'A') { setFileA(null); setErrorA(null); }
     if (target === 'B') { setFileB(null); setErrorB(null); }
-    setResults(null); setProgress(0); setVisibleCount(5);
+    setResults(null); setProgress(0); setVisibleCount(5); setStats(null); setHotspots([]);
   };
 
   const startAnalysis = () => {
     if (!fileA || !fileB) return;
-    setIsProcessing(true); setProgress(0); setResults(null); setVisibleCount(5);
+    setIsProcessing(true); setProgress(0); setResults(null); setVisibleCount(5); setShowIntro(true);
     workerRef.current?.postMessage({ dataA: fileA, dataB: fileB, config: { maxDistanceMeters: maxDistance, maxTimeDiffMs: maxTimeDiff * 60 * 1000 } });
   };
 
@@ -818,64 +1015,46 @@ export default function App() {
     const textArea = document.createElement("textarea"); textArea.value = joinLink;
     textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
     document.body.appendChild(textArea); textArea.focus(); textArea.select();
-    try { (document as any).execCommand('copy'); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 3000); } catch (err) {}
+    try { document.execCommand('copy'); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 3000); } catch (err) {}
     document.body.removeChild(textArea);
   };
 
-  // ULEPSZONY GENERATOR DANYCH TESTOWYCH (Generuje realistyczną historię z potencjalnymi trafieniami)
   const generateFakePartner = (sourceData: any[], setTargetFn: React.Dispatch<React.SetStateAction<any[] | null>>) => {
     if (!sourceData || sourceData.length === 0) return;
-    
     let fakePath: any[] = [];
-    
-    // Tworzymy kilka "sesji ruchu" (tras) rozrzuconych w czasie
     const numSessions = 8;
-    
     for (let s = 0; s < numSessions; s++) {
-      // Wybieramy bazowy punkt z Twojej historii
       const basePt = sourceData[Math.floor(Math.random() * sourceData.length)];
-      
-      // Decydujemy czy ta sesja ma być potencjalnym trafieniem (ok. 50% szans)
       const isCoincidence = Math.random() < 0.5;
-      
-      // Jeśli to nie zbieg okoliczności, przesuwamy czas i miejsce o dużą wartość
-      const timeJitter = isCoincidence ? 0 : (Math.random() - 0.5) * 1000 * 60 * 60 * 24 * 30; // +/- 30 dni
-      const posJitter = isCoincidence ? 0 : (Math.random() - 0.5) * 5; // +/- 5 stopni (setki km)
-      
+      const timeJitter = isCoincidence ? 0 : (Math.random() - 0.5) * 1000 * 60 * 60 * 24 * 30;
+      const posJitter = isCoincidence ? 0 : (Math.random() - 0.5) * 5; 
       let curLat = basePt.lat + posJitter;
       let curLon = basePt.lon + posJitter;
       const startTime = basePt.time + timeJitter;
-
-      // Generujemy krótką trasę (ok. 30-60 min ruchu)
       const sessionLength = 15 + Math.floor(Math.random() * 30);
       for (let i = 0; i < sessionLength; i++) {
-        // Co minutę dodajemy punkt
         const t = startTime + (i * 60000);
-        
-        // Jeśli to ma być trafienie, jeden z punktów w środku sesji ustawiamy bardzo blisko
         if (isCoincidence && i === Math.floor(sessionLength / 2)) {
-           // Prawie identyczne współrzędne w tym samym czasie
            fakePath.push({ time: t, lat: basePt.lat + 0.0001, lon: basePt.lon + 0.0001 });
         } else {
-           // Losowy ruch "pijaka"
            curLat += (Math.random() - 0.5) * 0.002;
            curLon += (Math.random() - 0.5) * 0.002;
            fakePath.push({ time: t, lat: curLat, lon: curLon });
         }
       }
     }
-    
-    // Sortujemy chronologicznie
     fakePath.sort((a, b) => a.time - b.time);
-    
-    setTargetFn(fakePath);
-    setResults(null);
-    setProgress(0);
+    setTargetFn(fakePath); setResults(null); setProgress(0);
   };
 
   const applyPreset = (dist: number, time: number) => {
     setMaxDistance(dist); setMaxTimeDiff(time);
   };
+
+  const closestMiss = useMemo(() => {
+    if (!results || results.length === 0) return null;
+    return [...results].sort((a, b) => a.distance - b.distance)[0];
+  }, [results]);
 
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
   const toggleLang = () => setLang(lang === 'pl' ? 'en' : 'pl');
@@ -883,11 +1062,11 @@ export default function App() {
   // WSPÓLNE RENDEROWANIE TOP BAR
   const TopBar = () => (
     <div className="absolute top-4 right-4 flex gap-3 z-50">
-      <button onClick={toggleLang} className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:scale-105 transition-all flex items-center justify-center font-bold text-xs uppercase w-10 h-10">
+      <button onClick={toggleLang} className="p-2 rounded-full bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:scale-105 transition-all flex items-center justify-center font-bold text-xs uppercase w-10 h-10">
          <Globe size={16} className="absolute opacity-20" />
          <span className="relative z-10">{lang}</span>
       </button>
-      <button onClick={toggleTheme} className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:scale-105 transition-all flex items-center justify-center w-10 h-10">
+      <button onClick={toggleTheme} className="p-2 rounded-full bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:scale-105 transition-all flex items-center justify-center w-10 h-10">
          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
       </button>
     </div>
@@ -895,14 +1074,16 @@ export default function App() {
 
   return (
     <div className={theme === 'dark' ? 'dark' : ''}>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-4 sm:p-8 flex flex-col items-center selection:bg-rose-200 dark:selection:bg-rose-900/50 transition-colors duration-300">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 font-sans p-4 sm:p-8 flex flex-col items-center selection:bg-rose-200 dark:selection:bg-rose-900/50 transition-colors duration-300">
         <TopBar />
+        
+        {showIntro && <ConvergingPathsIntro onComplete={() => setShowIntro(false)} />}
 
         {isGuestMode ? (
           // ================= RENDEROWANIE: TRYB GOŚCIA =================
           <>
             <div className="absolute top-6 left-6 hidden sm:block">
-              <div className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-100 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300">
+              <div className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-gray-100 dark:border-slate-700 text-xs font-medium text-gray-600 dark:text-gray-300">
                  <Lock size={14} className="text-emerald-500" /> {t.secureBadge}
               </div>
             </div>
@@ -913,7 +1094,7 @@ export default function App() {
               </h1>
               <p className="text-gray-500 dark:text-gray-400 text-lg">{t.guestModeDesc}</p>
               
-              <button onClick={() => setShowInstructions(true)} className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-full text-sm font-bold shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:scale-105 active:scale-95">
+              <button onClick={() => setShowInstructions(true)} className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full text-sm font-bold shadow-sm border border-gray-200 dark:border-slate-700 transition-all hover:scale-105 active:scale-95">
                 <CircleHelp size={18} className="text-indigo-500" /> {t.howToData}
               </button>
             </div>
@@ -928,7 +1109,7 @@ export default function App() {
               </div>
             )}
 
-            <div className={`w-full max-w-md p-10 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-xl ${fileA ? 'bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-100 dark:border-emerald-800' : errorA ? 'bg-red-50 dark:bg-red-900/20 border-2 border-red-100 dark:border-red-800' : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700'}`}>
+            <div className={`w-full max-w-md p-10 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-xl ${fileA ? 'bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-100 dark:border-emerald-800' : errorA ? 'bg-red-50 dark:bg-red-900/20 border-2 border-red-100 dark:border-red-800' : 'bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700'}`}>
               {fileA ? (
                 <div className="text-center w-full animate-fade-in">
                   <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
@@ -937,7 +1118,7 @@ export default function App() {
                   <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">Pomyślnie dodano!</h3>
                   <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">Zabezpieczono {fileA.length.toLocaleString('pl-PL')} punktów.</p>
                   
-                  <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-emerald-50 dark:border-emerald-900/30">
+                  <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-emerald-50 dark:border-emerald-900/30">
                     {peerStatus === 'connected' && !results ? (
                       <div className="flex flex-col items-center justify-center gap-3 text-indigo-600 dark:text-indigo-400 font-semibold text-center">
                         <Activity size={28} className="animate-spin text-indigo-400" /> <span>{t.waitingForHost}</span>
@@ -955,51 +1136,26 @@ export default function App() {
                 </div>
               ) : (
                 <div className="w-full flex flex-col items-center">
-                  <div className="bg-gray-50 dark:bg-gray-900 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-gray-100 dark:border-gray-700">
+                  <div className="bg-gray-50 dark:bg-slate-900 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-gray-100 dark:border-slate-700">
                     <CloudUpload className={`w-10 h-10 ${errorA ? 'text-red-400' : 'text-indigo-500'}`} />
                   </div>
                   <h3 className="font-bold text-xl mb-2">{t.uploadYourHistory}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">{t.usuallyFile} <code className="bg-gray-100 dark:bg-gray-900 px-1.5 py-0.5 rounded text-indigo-600 dark:text-indigo-400 font-mono text-xs">Records.json</code></p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">{t.usuallyFile} <code className="bg-gray-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-indigo-600 dark:text-indigo-400 font-mono text-xs">Records.json</code></p>
                   
                   <div className="relative w-full group">
                     <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-rose-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
-                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="relative text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-gray-700 file:text-white hover:file:bg-gray-800 dark:hover:file:bg-gray-600 w-full cursor-pointer bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm" />
+                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="relative text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-slate-700 file:text-white hover:file:bg-gray-800 dark:hover:file:bg-slate-600 w-full cursor-pointer bg-white dark:bg-slate-800 rounded-full border border-gray-200 dark:border-slate-700 shadow-sm" />
                   </div>
                   {errorA && (<div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-2xl text-sm text-red-700 dark:text-red-400 flex items-start gap-3 w-full"><TriangleAlert size={20} className="shrink-0" /><span>{errorA}</span></div>)}
                 </div>
               )}
             </div>
-
-            {results && (
-              <div className="w-full max-w-3xl mt-12 animate-fade-in">
-                <h2 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 mb-8 flex items-center justify-center gap-3">
-                  {results.length > 0 ? <><Sparkles className="text-rose-500"/> {t.foundMatches}</> : t.noMatches}
-                </h2>
-                <div className="space-y-6">
-                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
-                  <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
-                  
-                  {results.slice(0, visibleCount).map((match: any, i: number) => {
-                    return <MatchCard key={i} match={match} lang={lang} t={t} />;
-                  })}
-                  
-                  {results.length > visibleCount && (
-                    <div className="text-center pt-6">
-                      <button onClick={() => setVisibleCount(v => v + 5)} className="px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full font-bold text-sm transition-colors border border-gray-200 dark:border-gray-700 shadow-sm">
-                        {t.showMore} ({results.length - visibleCount})
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <MapView matches={results} />
-              </div>
-            )}
           </>
         ) : (
           // ================= RENDEROWANIE: TRYB HOSTA =================
           <>
             <div className="mt-2 mb-8 animate-fade-in hidden sm:block">
-              <div className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-200 dark:border-gray-700 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+              <div className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-gray-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
                 <ShieldCheck size={18} className="text-emerald-500" /> {t.secureBadge}
               </div>
             </div>
@@ -1011,7 +1167,7 @@ export default function App() {
               <p className="text-lg sm:text-xl text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
                 {t.subtitle}
               </p>
-              <button onClick={() => setShowInstructions(true)} className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-full text-sm font-bold shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:scale-105 active:scale-95">
+              <button onClick={() => setShowInstructions(true)} className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full text-sm font-bold shadow-sm border border-gray-200 dark:border-slate-700 transition-all hover:scale-105 active:scale-95">
                 <CircleHelp size={18} className="text-indigo-500" /> {t.howToData}
               </button>
             </div>
@@ -1028,10 +1184,10 @@ export default function App() {
 
             <div className="flex flex-col lg:flex-row gap-8 w-full max-w-5xl mb-12">
               {/* Osoba A */}
-              <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 ${fileA ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : errorA ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500'}`}>
+              <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 ${fileA ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : errorA ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-slate-800 border-dashed border-gray-300 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500'}`}>
                 {fileA ? (
                   <div className="text-center w-full animate-fade-in">
-                    <button onClick={() => clearFile('A')} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 transition-colors bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
+                    <button onClick={() => clearFile('A')} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 transition-colors bg-white dark:bg-slate-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
                     <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"><CircleCheck className="text-emerald-600 dark:text-emerald-400 w-10 h-10" /></div>
                     <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.readyHost}</h3>
                     <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{t.readyPts.replace('{n}', fileA.length.toLocaleString('pl-PL'))}</p>
@@ -1041,7 +1197,7 @@ export default function App() {
                     <div className="bg-indigo-50 dark:bg-indigo-900/30 w-20 h-20 rounded-full flex items-center justify-center mb-6"><CloudUpload className={`w-10 h-10 ${errorA ? 'text-red-500' : 'text-indigo-600 dark:text-indigo-400'}`} /></div>
                     <h3 className="font-bold text-2xl mb-2">{t.hostTitle}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8 font-medium">{t.hostDesc}</p>
-                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-gray-700 file:text-white hover:file:bg-gray-800 dark:hover:file:bg-gray-600 w-full max-w-[280px] cursor-pointer bg-gray-50 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm" />
+                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-slate-700 file:text-white hover:file:bg-gray-800 dark:hover:file:bg-slate-600 w-full max-w-[280px] cursor-pointer bg-gray-50 dark:bg-slate-900 rounded-full border border-gray-200 dark:border-slate-700 shadow-sm" />
                     {errorA && (<div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-2xl text-sm text-red-700 dark:text-red-400 flex items-start gap-3 max-w-xs text-left"><TriangleAlert size={20} className="shrink-0 mt-0.5" /><span>{errorA}</span></div>)}
                   </div>
                 )}
@@ -1051,20 +1207,20 @@ export default function App() {
               <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 overflow-hidden ${
                 peerStatus === 'hosting' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' : 
                 peerStatus === 'connected' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 
-                fileB ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300'
+                fileB ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-slate-800 border-dashed border-gray-300 dark:border-slate-700 hover:border-indigo-300'
               }`}>
                 {peerStatus === 'hosting' ? (
                    <div className="text-center w-full animate-fade-in flex flex-col items-center">
-                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><X size={20} /></button>
-                     <h3 className="font-extrabold text-2xl text-indigo-900 dark:text-indigo-300 mb-3 flex items-center justify-center gap-2"><QrCode size={24} className="text-indigo-600 dark:text-indigo-400"/> Zaproś Gościa</h3>
-                     <p className="text-sm text-indigo-700 dark:text-indigo-400 font-medium mb-6">Zeskanuj kod telefonem lub podaj PIN.</p>
+                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-slate-700 p-2 rounded-full shadow-sm"><X size={20} /></button>
+                     <h3 className="font-extrabold text-2xl text-indigo-900 dark:text-indigo-300 mb-3 flex items-center justify-center gap-2"><QrCode size={24} className="text-indigo-600 dark:text-indigo-400"/> {t.inviteGuest}</h3>
+                     <p className="text-sm text-indigo-700 dark:text-indigo-400 font-medium mb-6">{t.scanOrPin}</p>
                      {joinLink && (
                        <div className="bg-white p-3 rounded-2xl mb-6 shadow-md border border-indigo-100">
                           <img src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinLink)}`} alt="QR Code" className="w-[160px] h-[160px]" />
                        </div>
                      )}
-                     <div className="bg-white dark:bg-gray-900 border border-indigo-100 dark:border-gray-700 rounded-2xl p-4 mb-6 w-full shadow-sm">
-                        <div className="text-xs font-bold text-indigo-400 dark:text-indigo-500 mb-1 uppercase tracking-wider">Kod pokoju</div>
+                     <div className="bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-700 rounded-2xl p-4 mb-6 w-full shadow-sm">
+                        <div className="text-xs font-bold text-indigo-400 dark:text-indigo-500 mb-1 uppercase tracking-wider">{t.roomCode}</div>
                         <div className="text-4xl font-mono font-black text-indigo-900 dark:text-indigo-300 tracking-[0.25em]">{peerId}</div>
                      </div>
                      <button onClick={copyLink} className="flex w-full max-w-[200px] items-center justify-center gap-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-3 rounded-full transition-all shadow-md active:scale-95">
@@ -1074,14 +1230,14 @@ export default function App() {
                    </div>
                 ) : peerStatus === 'connected' && fileB ? (
                    <div className="text-center w-full animate-fade-in">
-                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm" title="Zakończ sesję"><Trash2 size={20} /></button>
+                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-slate-700 p-2 rounded-full shadow-sm" title="Zakończ sesję"><Trash2 size={20} /></button>
                      <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"><Smartphone className="text-emerald-600 dark:text-emerald-400 w-10 h-10" /></div>
                      <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.guestJoined}</h3>
                      <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">{t.guestJoinedDesc.replace('{n}', fileB.length.toLocaleString('pl-PL'))}</p>
                    </div>
                 ) : fileB ? (
                    <div className="text-center w-full animate-fade-in">
-                     <button onClick={() => clearFile('B')} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
+                     <button onClick={() => clearFile('B')} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-slate-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
                      <div className="bg-rose-100 dark:bg-rose-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"><CircleCheck className="text-rose-600 dark:text-rose-400 w-10 h-10" /></div>
                      <h3 className="font-bold text-2xl text-rose-800 dark:text-rose-300 mb-2">{t.guestReadyManual}</h3>
                      <p className="text-sm font-medium text-rose-600 dark:text-rose-400 mt-1">{t.guestManualDesc.replace('{n}', fileB.length.toLocaleString('pl-PL'))}</p>
@@ -1090,17 +1246,17 @@ export default function App() {
                   <div className="w-full flex flex-col items-center">
                     <div className="bg-rose-50 dark:bg-rose-900/30 w-20 h-20 rounded-full flex items-center justify-center mb-6"><QrCode className="w-10 h-10 text-rose-500 dark:text-rose-400" /></div>
                     <h3 className="font-bold text-2xl mb-6">{t.guestTitle}</h3>
-                    <button onClick={startHosting} className={`mb-6 w-full max-w-[280px] py-3.5 px-6 rounded-full font-bold text-base shadow-md transition-all flex items-center justify-center gap-2 ${fileA ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:scale-105 active:scale-95' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border border-gray-200 dark:border-gray-700'}`}>
+                    <button onClick={startHosting} className={`mb-6 w-full max-w-[280px] py-3.5 px-6 rounded-full font-bold text-base shadow-md transition-all flex items-center justify-center gap-2 ${fileA ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:scale-105 active:scale-95' : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border border-gray-200 dark:border-slate-700'}`}>
                       <Smartphone size={18} /> Otwórz skaner QR
                     </button>
                     <div className="flex w-full max-w-[280px] gap-2 mb-6">
-                        <input type="text" value={manualJoinCode} onChange={(e) => setManualJoinCode(e.target.value.toUpperCase())} placeholder={t.pinPlaceholder} className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full px-5 py-3 text-sm uppercase placeholder:normal-case font-mono font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" maxLength={8} />
+                        <input type="text" value={manualJoinCode} onChange={(e) => setManualJoinCode(e.target.value.toUpperCase())} placeholder={t.pinPlaceholder} className="flex-1 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-full px-5 py-3 text-sm uppercase placeholder:normal-case font-mono font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" maxLength={8} />
                         <button onClick={handleManualJoin} disabled={!manualJoinCode.trim()} className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-3 rounded-full text-sm font-bold shadow-sm"><ArrowRight size={18} /></button>
                     </div>
                     <div className="relative flex items-center py-2 w-full max-w-[280px] opacity-60">
-                      <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div><span className="flex-shrink-0 mx-4 text-xs font-bold uppercase tracking-widest">Lub tradycyjnie</span><div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
+                      <div className="flex-grow border-t border-gray-300 dark:border-slate-700"></div><span className="flex-shrink-0 mx-4 text-xs font-bold uppercase tracking-widest">Lub tradycyjnie</span><div className="flex-grow border-t border-gray-300 dark:border-slate-700"></div>
                     </div>
-                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileB, setErrorB)} className="text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-gray-100 dark:file:bg-gray-800 file:text-gray-700 dark:file:text-gray-300 hover:file:bg-gray-200 w-full max-w-[280px] mt-4 cursor-pointer text-gray-500 transition-all" />
+                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileB, setErrorB)} className="text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-gray-100 dark:file:bg-slate-800 file:text-gray-700 dark:file:text-gray-300 hover:file:bg-gray-200 w-full max-w-[280px] mt-4 cursor-pointer text-gray-500 transition-all" />
                     {errorB && (<div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl text-xs text-red-700 flex items-start gap-2 max-w-[280px] text-left"><TriangleAlert size={16} className="shrink-0 text-red-500" /><span>{errorB}</span></div>)}
                     {fileA && !errorB && (
                       <button onClick={() => generateFakePartner(fileA, setFileB)} className="mt-6 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100 rounded-full text-xs font-bold text-rose-600 transition-colors border border-rose-200 dark:border-rose-800/50 group">
@@ -1111,9 +1267,10 @@ export default function App() {
                 )}
               </div>
             </div>
-
-            <div className="w-full max-w-5xl bg-white dark:bg-gray-800 rounded-[2rem] p-8 sm:p-10 border border-gray-200 dark:border-gray-700 mb-12 shadow-sm">
-              <div className="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-8">
+            
+            {/* Ustawienia Wyszukiwania */}
+            <div className="w-full max-w-5xl bg-white dark:bg-slate-800 rounded-[2rem] p-8 sm:p-10 border border-gray-200 dark:border-slate-700 mb-12 shadow-sm">
+              <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-700 pb-4 mb-8">
                 <h3 className="text-xl font-extrabold flex items-center gap-3"><Settings size={24} className="text-indigo-500" /> {t.searchParams}</h3>
                 
                 {/* PRESETY */}
@@ -1125,23 +1282,23 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
+                <div className="bg-gray-50 dark:bg-slate-900 p-6 rounded-2xl border border-gray-100 dark:border-slate-700">
                   <label className="flex justify-between text-sm font-bold text-gray-700 dark:text-gray-300 mb-6">
                     <span>{t.distLabel}</span>
                     <span className="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-lg border border-indigo-100 dark:border-indigo-800/50">{maxDistance >= 1000 ? (maxDistance/1000).toFixed(1) + ' km' : maxDistance + ' m'}</span>
                   </label>
-                  <input type="range" min="5" max="5000" step="5" value={maxDistance} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxDistance(parseInt(e.target.value))} className="w-full h-2 bg-gray-300 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                  <input type="range" min="5" max="5000" step="5" value={maxDistance} onChange={(e: any) => setMaxDistance(parseInt(e.target.value))} className="w-full h-2 bg-gray-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
+                <div className="bg-gray-50 dark:bg-slate-900 p-6 rounded-2xl border border-gray-100 dark:border-slate-700">
                   <label className="flex justify-between text-sm font-bold text-gray-700 dark:text-gray-300 mb-6">
                     <span>{t.timeLabel}</span>
                     <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30 px-3 py-1 rounded-lg border border-rose-100 dark:border-rose-800/50">{maxTimeDiff >= 60 ? Math.floor(maxTimeDiff/60) + 'h ' + (maxTimeDiff%60) + 'm' : maxTimeDiff + ' min'}</span>
                   </label>
-                  <input type="range" min="1" max="1440" step="1" value={maxTimeDiff} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxTimeDiff(parseInt(e.target.value))} className="w-full h-2 bg-gray-300 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-rose-500" />
+                  <input type="range" min="1" max="1440" step="1" value={maxTimeDiff} onChange={(e: any) => setMaxTimeDiff(parseInt(e.target.value))} className="w-full h-2 bg-gray-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-rose-500" />
                 </div>
               </div>
               
-              <div className="md:hidden flex flex-wrap justify-center gap-2 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+              <div className="md:hidden flex flex-wrap justify-center gap-2 mt-6 pt-6 border-t border-gray-100 dark:border-slate-700">
                  <button onClick={() => applyPreset(50, 60)} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 px-3 py-1.5 rounded-lg">{t.presetParty}</button>
                  <button onClick={() => applyPreset(500, 180)} className="text-xs font-bold bg-purple-50 dark:bg-purple-900/30 text-purple-700 px-3 py-1.5 rounded-lg">{t.presetFest}</button>
                  <button onClick={() => applyPreset(5000, 720)} className="text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-700 px-3 py-1.5 rounded-lg">{t.presetCity}</button>
@@ -1149,91 +1306,161 @@ export default function App() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 mb-16 w-full max-w-sm justify-center">
-              <button onClick={startAnalysis} disabled={!fileA || !fileB || isProcessing} className="w-full py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold text-lg shadow-xl transition-all disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-1 active:translate-y-0">
+              <button onClick={startAnalysis} disabled={!fileA || !fileB || isProcessing} className="w-full py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-gray-900 rounded-full font-extrabold text-lg shadow-xl transition-all disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-1 active:translate-y-0">
                 {isProcessing ? <Activity className="animate-spin" size={24} /> : <Play fill="currentColor" size={20} />} 
                 {isProcessing ? t.analyzingBtn : t.analyzeBtn}
               </button>
             </div>
 
             {isProcessing && (
-              <div className="w-full max-w-3xl bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm mb-12">
-                <div className="w-full bg-gray-100 dark:bg-gray-900 rounded-full h-3 mb-4 overflow-hidden relative">
+              <div className="w-full max-w-3xl bg-white dark:bg-slate-800 p-6 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-sm mb-12">
+                <div className="w-full bg-gray-100 dark:bg-slate-900 rounded-full h-3 mb-4 overflow-hidden relative">
                   <div className="bg-gradient-to-r from-indigo-500 to-rose-500 h-3 transition-all duration-300 ease-out rounded-full" style={{ width: `${progress}%` }}></div>
                 </div>
-                <p className="text-center text-sm font-bold text-gray-500 dark:text-gray-400">{t[statusMsgId] || statusMsgId} <span className="text-indigo-600 dark:text-indigo-400 ml-1">{progress}%</span></p>
-              </div>
-            )}
-
-            {results && (
-              <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-[2rem] p-8 sm:p-12 shadow-xl border border-gray-200 dark:border-gray-700 animate-fade-in relative overflow-hidden">
-                {results.length > 0 && <div className="absolute top-0 right-0 p-8 opacity-5"><HeartHandshake size={200} /></div>}
-                <h2 className="text-3xl sm:text-4xl font-extrabold mb-10 flex items-center gap-4 relative z-10">
-                  {results.length > 0 ? <><Sparkles className="text-rose-500" size={36} /> {t.foundMatches}</> : t.noMatches}
-                </h2>
-                
-                {/* PAGINACJA WYNIKÓW I KARTY */}
-                <div className="space-y-6 relative z-10">
-                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD (Spotify Wrapped Style) */}
-                  <style>{`
-                    .exporting-card .hide-on-export { display: none !important; }
-                    .exporting-card .watermark-only { display: block !important; }
-                    .exporting-card {
-                      width: 540px !important;
-                      height: 960px !important;
-                      background: radial-gradient(circle at 10% 20%, #1e1b4b 0%, #0f172a 100%) !important;
-                      color: #f8fafc !important;
-                      border-radius: 40px !important;
-                      padding: 60px 40px !important;
-                      border: none !important;
-                      box-shadow: none !important;
-                      display: flex !important;
-                      flex-direction: column !important;
-                      justify-content: center !important;
-                      align-items: center !important;
-                      text-align: center !important;
-                      box-sizing: border-box !important;
-                    }
-                    .exporting-card .export-container-reset { padding: 0 !important; margin: 0 !important; width: 100% !important; background: transparent !important; border: none !important; }
-                    .exporting-card .export-header { display: block !important; font-size: 1.1rem !important; font-weight: 900 !important; color: #f472b6 !important; letter-spacing: 0.3em !important; text-transform: uppercase !important; margin-bottom: 40px !important; }
-                    .exporting-card .export-row { flex-direction: column !important; align-items: center !important; border: none !important; margin-bottom: 30px !important; }
-                    .exporting-card .export-date-block { align-items: center !important; margin-bottom: 15px !important; }
-                    .exporting-card .date-text { font-size: 3.8rem !important; line-height: 1 !important; margin-bottom: 5px !important; color: #fff !important; font-weight: 900 !important; }
-                    .exporting-card .time-text { font-size: 1.4rem !important; color: #94a3b8 !important; justify-content: center !important; }
-                    .exporting-card .export-distance-block { padding: 0 !important; margin-top: 5px !important; width: 100% !important; display: flex !important; justify-content: center !important; }
-                    .exporting-card .distance-badge { background: rgba(244, 114, 182, 0.15) !important; border-color: rgba(244, 114, 182, 0.3) !important; color: #f472b6 !important; font-size: 1.2rem !important; padding: 10px 24px !important; border-radius: 999px !important; font-weight: 800 !important; width: fit-content !important; }
-                    .exporting-card .export-map-container { width: 100% !important; margin: 30px 0 !important; }
-                    .exporting-card .export-map-frame { height: 260px !important; border: 2px solid rgba(255,255,255,0.1) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important; }
-                    .exporting-card .ai-section-export { border: none !important; width: 100% !important; margin-top: 10px !important; padding-top: 0 !important; }
-                    .exporting-card .story-content-container { background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
-                    .exporting-card .ai-title { display: none !important; }
-                    .exporting-card .ai-text { font-size: 1.3rem !important; line-height: 1.5 !important; color: #e2e8f0 !important; font-style: italic !important; text-align: center !important; font-weight: 500 !important; max-width: 400px !important; }
-                    .exporting-card .icon-sparkle-bg { display: none !important; }
-                  `}</style>
-                  
-                  {results.slice(0, visibleCount).map((match: any, i: number) => {
-                    return <MatchCard key={i} match={match} lang={lang} t={t} />;
-                  })}
-                  
-                  {results.length > visibleCount && (
-                    <div className="text-center pt-6">
-                      <button onClick={() => setVisibleCount(v => v + 5)} className="px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full font-bold text-sm transition-colors border border-gray-200 dark:border-gray-700 shadow-sm">
-                        {t.showMore} ({results.length - visibleCount})
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <MapView matches={results} />
+                <p className="text-center text-sm font-bold text-gray-500 dark:text-slate-400">{statusText} <span className="text-indigo-600 dark:text-indigo-400 ml-1">{progress}%</span></p>
               </div>
             )}
           </>
         )}
 
-        {/* MODAL INSTRUKCJI - WSPÓLNY DLA OBU WIDOKÓW */}
+        {/* WSPÓLNA SEKCJA WYNIKÓW DLA HOSTA I GOŚCIA */}
+        {results && (
+          <div className="w-full max-w-4xl space-y-12 animate-in slide-in-from-bottom duration-1000 pb-20 mt-12">
+            
+            {/* Wskaźnik Przeznaczenia (Destiny Score) */}
+            <div className="relative bg-gray-950 rounded-[3rem] p-12 text-center text-white overflow-hidden shadow-2xl border border-gray-800">
+               <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
+               <h3 className="text-indigo-400 font-black tracking-widest uppercase mb-4 text-xs flex items-center justify-center gap-2"><Zap size={16} fill="currentColor"/> {t.destinyTitle}</h3>
+               <div className="text-[8rem] sm:text-[11rem] font-black leading-none bg-gradient-to-b from-white to-indigo-500 bg-clip-text text-transparent drop-shadow-2xl">{destinyScore}%</div>
+               <p className="mt-6 text-gray-400 font-medium max-w-md mx-auto text-sm">{t.destinyDesc}</p>
+               <div className="mt-8">
+                  <button className="bg-rose-500 hover:bg-rose-600 transition-colors px-6 py-3 rounded-full font-bold text-xs flex items-center gap-2 mx-auto">
+                    <Lock size={14} /> {t.premiumUnlock}
+                  </button>
+               </div>
+            </div>
+
+            {/* Profile Podróżnika */}
+            {stats && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                 <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-around">
+                    <div className="text-center">
+                       <div className="text-3xl font-black text-indigo-500">{stats.A.zoneCount}</div>
+                       <div className="text-[10px] uppercase font-bold text-gray-400">{t.statsZones} (P1)</div>
+                    </div>
+                    <div className="w-px h-12 bg-gray-200 dark:bg-slate-700"></div>
+                    <div className="text-center">
+                       <div className="text-3xl font-black text-indigo-500">{stats.A.pointCount.toLocaleString()}</div>
+                       <div className="text-[10px] uppercase font-bold text-gray-400">{t.statsPoints} (P1)</div>
+                    </div>
+                 </div>
+                 <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-around">
+                    <div className="text-center">
+                       <div className="text-3xl font-black text-rose-500">{stats.B.zoneCount}</div>
+                       <div className="text-[10px] uppercase font-bold text-gray-400">{t.statsZones} (P2)</div>
+                    </div>
+                    <div className="w-px h-12 bg-gray-200 dark:bg-slate-700"></div>
+                    <div className="text-center">
+                       <div className="text-3xl font-black text-rose-500">{stats.B.pointCount.toLocaleString()}</div>
+                       <div className="text-[10px] uppercase font-bold text-gray-400">{t.statsPoints} (P2)</div>
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            {/* Najbliższe Minięcie (The Closest Miss) */}
+            {closestMiss && (
+              <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-[2.5rem] p-10 text-white relative overflow-hidden shadow-xl">
+                 <div className="absolute -right-10 -top-10 opacity-20 pointer-events-none">
+                   <Star size={300} fill="currentColor" />
+                 </div>
+                 <div className="relative z-10">
+                    <div className="text-[10px] font-black uppercase tracking-widest mb-2 opacity-80">{t.closestMissTitle}</div>
+                    <div className="text-5xl sm:text-7xl font-black mb-2">{closestMiss.distance} m</div>
+                    <p className="text-rose-100 font-medium text-lg">{t.closestMissDesc}</p>
+                    <div className="mt-8 flex items-center gap-2 text-sm font-bold bg-white/20 w-fit px-4 py-2 rounded-xl backdrop-blur-md">
+                       <Calendar size={16} /> {new Date(closestMiss.time).toLocaleDateString()} o {new Date(closestMiss.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            <ConstellationView matches={results} t={t} />
+
+            {/* Hotspoty */}
+            {hotspots.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] overflow-hidden border border-gray-200 dark:border-slate-700 shadow-sm">
+                 <div className="p-8 border-b border-gray-100 dark:border-slate-700">
+                    <div className="flex items-center gap-2 text-orange-500 font-black uppercase text-xs mb-1">
+                      <Flame size={16} fill="currentColor" /> {t.hotspotsTitle}
+                    </div>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs">{t.hotspotsDesc}</p>
+                 </div>
+                 <div className="w-full h-96 relative">
+                    <HotspotMap hotspots={hotspots} />
+                 </div>
+              </div>
+            )}
+
+            {/* Oś Czasu (Lista Wyników) */}
+            <div className="space-y-8">
+              <h2 className="text-2xl font-black flex items-center gap-3 px-4 text-gray-900 dark:text-white">
+                <Compass className="text-indigo-500" /> {t.timelineTitle}
+              </h2>
+              <div className="relative border-l-4 border-gray-200 dark:border-slate-700 ml-4 sm:ml-8 pl-6 sm:pl-10 space-y-12">
+                
+                {/* Wymuszone style dla plakatu IG (dodane globalnie by działało w html2canvas) */}
+                <style>{`
+                  .exporting-card { width: 540px !important; height: 960px !important; background: radial-gradient(circle at 10% 20%, #1e1b4b 0%, #0f172a 100%) !important; color: white !important; border-radius: 40px !important; padding: 80px 50px !important; border: none !important; display: flex !important; flex-direction: column !important; justify-content: center !important; text-align: center !important; align-items: center !important; box-sizing: border-box !important; }
+                  .exporting-card .hide-on-export { display: none !important; }
+                  .exporting-card .watermark-only { display: block !important; }
+                  .exporting-card .export-header { display: block !important; font-size: 1.1rem; font-weight: 900; color: #f472b6; letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 40px; }
+                  .exporting-card .export-row { flex-direction: column !important; border: none !important; align-items: center !important; margin-bottom: 40px !important; }
+                  .exporting-card .date-text { font-size: 3.8rem !important; line-height: 1 !important; margin-bottom: 10px !important; color: white !important; font-weight: 900 !important; }
+                  .exporting-card .time-text { font-size: 1.5rem !important; color: #94a3b8 !important; }
+                  .exporting-card .distance-badge { background: rgba(244, 114, 182, 0.15) !important; border: 1px solid rgba(244, 114, 182, 0.3) !important; color: #f472b6 !important; font-size: 1.3rem !important; margin-top: 20px !important; padding: 12px 28px !important; }
+                  .exporting-card .export-map-frame { height: 280px !important; border: 2px solid rgba(255,255,255,0.1) !important; margin: 30px 0 !important; box-shadow: 0 20px 40px rgba(0,0,0,0.5) !important; }
+                  .exporting-card .story-content-container { background: transparent !important; border: none !important; }
+                  .exporting-card .ai-text { font-size: 1.4rem !important; line-height: 1.5 !important; color: #cbd5e1 !important; font-style: italic !important; }
+                  .exporting-card .export-label-only { display: block !important; }
+                `}</style>
+
+                {results.slice(0, visibleCount).map((match: any, idx: number) => (
+                  <div key={idx} className="relative group">
+                    <div className="absolute -left-[36px] sm:-left-[58px] top-0 w-8 h-8 sm:w-10 sm:h-10 bg-white dark:bg-slate-900 border-4 border-indigo-500 rounded-full group-hover:scale-110 transition-transform flex items-center justify-center shadow-lg">
+                      <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                    </div>
+                    <MatchCard match={match} lang={lang} t={t} />
+                  </div>
+                ))}
+
+                {results.length > visibleCount && (
+                  <div className="text-center pt-6">
+                    <button onClick={() => setVisibleCount(v => v + 5)} className="px-6 py-3 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-800 dark:text-gray-200 rounded-full font-bold text-sm transition-colors border border-gray-200 dark:border-slate-700 shadow-sm">
+                      {t.showMore} ({results.length - visibleCount})
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Pełna Mapa na dole */}
+            <div className="mt-12">
+               <h2 className="text-2xl font-black mb-4 px-4 text-gray-900 dark:text-white flex items-center gap-2">
+                 <MapPin className="text-rose-500"/> Podgląd ogólny
+               </h2>
+               <MapView matches={results} />
+            </div>
+
+          </div>
+        )}
+
+        {/* MODAL INSTRUKCJI */}
         {showInstructions && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md overflow-y-auto animate-fade-in">
-            <div className="bg-white dark:bg-gray-800 rounded-[2rem] p-8 max-w-3xl w-full shadow-2xl relative my-8 border border-gray-100 dark:border-gray-700">
-              <button onClick={() => setShowInstructions(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 p-2 rounded-full transition-all"><X size={24} /></button>
-              <h2 className="text-3xl font-extrabold mb-4 flex items-center gap-3 text-gray-900 dark:text-gray-100">
+            <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-8 max-w-3xl w-full shadow-2xl relative my-8 border border-gray-100 dark:border-slate-700">
+              <button onClick={() => setShowInstructions(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 p-2 rounded-full transition-all"><X size={24} /></button>
+              <h2 className="text-3xl font-extrabold mb-4 flex items-center gap-3 text-gray-900 dark:text-slate-100">
                 <CircleHelp size={32} className="text-indigo-500" /> {t.howToData}
               </h2>
               <p className="text-gray-600 dark:text-gray-400 text-base mb-8 font-medium leading-relaxed">
@@ -1246,7 +1473,6 @@ export default function App() {
                     <Smartphone className="text-indigo-500" /> {t.method1}
                   </h3>
                   
-                  {/* Przycisk głębokiego linkowania do osi czasu */}
                   <a href="https://www.google.com/maps/timeline" target="_blank" rel="noopener noreferrer" className="mb-5 flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-sm transition-all active:scale-95">
                     <MapPin size={18} /> {t.openTimelineBtn}
                   </a>
@@ -1263,7 +1489,7 @@ export default function App() {
               </div>
               
               <div className="mt-10 text-center">
-                <button onClick={() => setShowInstructions(false)} className="px-10 py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">
+                <button onClick={() => setShowInstructions(false)} className="px-10 py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-gray-900 rounded-full font-extrabold shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">
                   {t.gotIt}
                 </button>
               </div>

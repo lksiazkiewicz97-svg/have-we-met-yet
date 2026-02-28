@@ -54,7 +54,7 @@ const dict: Record<string, any> = {
     aiGenerating: "Sztuczna inteligencja tworzy magię...",
     aiStoryTitle: "Magia chwili (Pełna historia):",
     aiSources: "Źródła historyczne:",
-    shareStory: "Udostępnij (IG / TikTok)",
+    shareStory: "Udostępnij (IG Story)",
     downloading: "Przygotowywanie grafiki...",
     guestModeTitle: "Dołączasz do sesji! 🎉",
     guestModeDesc: "Twój znajomy chce sprawdzić, czy kiedyś już się minęliście. Dodaj swoje wspomnienia z Map Google.",
@@ -121,7 +121,7 @@ const dict: Record<string, any> = {
     aiGenerating: "Artificial Intelligence is creating magic...",
     aiStoryTitle: "Magic of the moment (Full story):",
     aiSources: "Historical sources:",
-    shareStory: "Share (IG / TikTok)",
+    shareStory: "Share (IG Story)",
     downloading: "Preparing poster...",
     guestModeTitle: "You're joining the session! 🎉",
     guestModeDesc: "Your friend wants to check if you've crossed paths before. Add your Google Maps memories.",
@@ -299,7 +299,7 @@ const MapView = ({ matches }: { matches: any[] }) => {
 };
 
 // ============================================================================
-// KOMPONENT AI
+// KOMPONENT AI (Wyłącznie generowanie tekstu)
 // ============================================================================
 const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) => {
   const [shortStory, setShortStory] = useState<string | null>(null);
@@ -308,7 +308,6 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [isLoadingLong, setIsLoadingLong] = useState<boolean>(false);
   const [sources, setSources] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
   // Zaktualizowany odczyt klucza API dla Cloudflare
   let apiKey = "";
@@ -351,12 +350,15 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       ? "Napisz maksymalnie 2 krótkie zdania podsumowania po polsku, gdzie się minęli na podstawie tych współrzędnych."
       : "Write max 2 short sentences in English summarizing where they crossed paths based on these coordinates.";
       
-    const prompt = `Data: ${dateStr}, Godzina: ${timeStr}. Lat: ${match.lat}, Lon: ${match.lon}. Dystans: ${match.distance}m. ${promptParams} Bądź zwięzły i zaintryguj ich podając nazwę miejsca/dzielnicy.`;
+    // ZRESTYKCYJNY PROMPT DLA WIĘKSZEJ PRECYZJI
+    const prompt = `Data: ${dateStr}, Godzina: ${timeStr}. Lat: ${match.lat}, Lon: ${match.lon}. Dystans: ${match.distance}m. 
+    WAŻNE: Działasz jako super precyzyjny geolokator. Zidentyfikuj DOKŁADNE miejsce pod tymi współrzędnymi GPS. Jeśli to zwykła ulica, podaj jej nazwę. NIE UŻYWAJ i nie "przyklejaj" tego punktu do nazw pobliskich dużych obiektów (np. galerii handlowych jak Wroclavia, stadionów, rynków), chyba że współrzędne znajdują się BEZPOŚREDNIO wewnątrz tych obiektów.
+    ${promptParams} Bądź zwięzły i zaintryguj ich podając najdokładniejszą lokalizację.`;
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
-      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie fakty geograficzne. Respond in requested language." }] }
+      systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie i ekstremalnie precyzyjne fakty geograficzne. Respond in requested language." }] }
     };
 
     try {
@@ -379,7 +381,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
       ? "Napisz 4-5 zdań intrygującej historii po polsku. Styl: ciepły, poetycki."
       : "Write 4-5 sentences of an intriguing, romantic story in English about how they might have passed each other here.";
 
-    const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło: ${shortStory}.`;
+    const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło (Trzymaj się DOKŁADNIE tej lokalizacji, nie wspominaj o pobliskich większych budynkach): ${shortStory}.`;
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} }],
@@ -401,61 +403,8 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     }
   };
 
-  const handleShare = async () => {
-    const win = window as any;
-    if (!win.html2canvas) return;
-    const element = document.getElementById(`story-card-${match.time}`);
-    if (!element) return;
-    
-    setIsDownloading(true);
-    try {
-      // Magia pod maską: Karta dostaje tymczasową klasę, by wyglądać jak plakat premium
-      element.classList.add('exporting-card');
-      const canvas = await win.html2canvas(element, { 
-        backgroundColor: '#1e1b4b', // Fallback koloru (tło wygenerowanego obrazka)
-        scale: 3, 
-        useCORS: true
-      });
-      element.classList.remove('exporting-card');
-      
-      const image = canvas.toDataURL("image/png");
-      const fileName = `HaveWeMet-${dateStr.replace(/\//g, '-')}.png`;
-
-      try {
-        // Konwersja base64 na plik (Blob) w celu użycia Web Share API
-        const response = await fetch(image);
-        const blob = await response.blob();
-        const file = new File([blob], fileName, { type: 'image/png' });
-
-        // Sprawdzenie, czy przeglądarka urządzenia obsługuje natywne udostępnianie plików
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: lang === 'pl' ? 'Nasze magiczne spotkanie!' : 'Our magical encounter!',
-            text: lang === 'pl' ? 'Sprawdź, kiedy nasze ścieżki przecięły się po raz pierwszy! 🤯📍 #HaveWeMet' : 'Look when our paths crossed for the first time! 🤯📍 #HaveWeMet',
-          });
-        } else {
-          // Fallback (np. dla Desktopu) - standardowe pobieranie pliku
-          throw new Error("Web Share API not supported");
-        }
-      } catch (shareErr) {
-        // Fallback działa również gdy użytkownik anuluje systemowe okno dzielenia
-        const link = document.createElement('a');
-        link.download = fileName;
-        link.href = image;
-        link.click();
-      }
-
-    } catch (e) {
-      console.error(e);
-      element.classList.remove('exporting-card');
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   return (
-    <div className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-5 relative z-10">
+    <div className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-5 relative z-10 w-full">
       {!shortStory && !isLoadingShort && (
         <button onClick={generateShortStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full transition-colors border border-indigo-200 dark:border-indigo-800/50 font-medium w-full sm:w-auto justify-center group hide-on-export">
           <Sparkles size={16} className="text-indigo-500 group-hover:animate-spin" />
@@ -502,14 +451,6 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
                 <Sparkles size={16} /> {t.aiStoryTitle}
               </div>
               <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic ai-text font-serif">"{longStory}"</p>
-              
-              {/* NOWY PRZYCISK SHARE (Web Share API) */}
-              <div className="mt-8 flex justify-end hide-on-export">
-                <button onClick={handleShare} disabled={isDownloading} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:scale-105 transition-transform rounded-full font-bold shadow-xl">
-                   {isDownloading ? <Activity size={16} className="animate-spin" /> : <Share2 size={16} />} 
-                   {isDownloading ? t.downloading : t.shareStory}
-                </button>
-              </div>
             </div>
           )}
           {sources.length > 0 && (
@@ -527,6 +468,100 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     </div>
   );
 };
+
+// ============================================================================
+// KOMPONENT KARTY SPOTKANIA (Z LOGIKĄ UDOSTĘPNIANIA)
+// ============================================================================
+const MatchCard = ({ match, lang, t }: { match: any, lang: string, t: any }) => {
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const date = new Date(match.time);
+  const dateStr = date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
+  
+  const handleShare = async () => {
+    const win = window as any;
+    if (!win.html2canvas) return;
+    const element = document.getElementById(`story-card-${match.time}`);
+    if (!element) return;
+    
+    setIsDownloading(true);
+    try {
+      element.classList.add('exporting-card');
+      const canvas = await win.html2canvas(element, { 
+        backgroundColor: '#1e1b4b', 
+        scale: 3, 
+        useCORS: true
+      });
+      element.classList.remove('exporting-card');
+      
+      const image = canvas.toDataURL("image/png");
+      const fileName = `HaveWeMet-${dateStr.replace(/\//g, '-')}.png`;
+
+      try {
+        const response = await fetch(image);
+        const blob = await response.blob();
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          // TIP: Samo przesłanie pliku (bez text i title) wymusza w wielu smartfonach (szczególnie iOS)
+          // wywołanie opcji graficznych udostępniania, gdzie Instagram Story / Snapchat grają pierwsze skrzypce!
+          await navigator.share({
+            files: [file]
+          });
+        } else {
+          throw new Error("Web Share API not supported");
+        }
+      } catch (shareErr) {
+        // Fallback dla komputerów stacjonarnych lub w przypadku przerwania okna dialogowego
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = image;
+        link.click();
+      }
+    } catch (e) {
+      console.error(e);
+      element.classList.remove('exporting-card');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return (
+    <div id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group overflow-hidden w-full">
+      {/* Znak wodny, ukryty normalnie, widoczny TYLKO na obrazku udostępnionym na Insta */}
+      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hidden watermark-only"></div>
+      <div className="absolute bottom-10 left-0 right-0 text-center hidden watermark-only">
+         <span className="text-white/80 font-black tracking-[0.4em] text-sm drop-shadow-lg">📍 HAVEWEMET.APP</span>
+      </div>
+
+      {/* Kontener nagłówka wymuszający bezpieczny Flexbox przy renderowaniu Canvas */}
+      <div className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10 w-full">
+        <div className="flex flex-col flex-1 shrink-0">
+          <div className="text-2xl font-black text-rose-500 tracking-tight mb-1">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
+          <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2">
+            <span>{date.toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' })}</span>
+          </div>
+        </div>
+        {/* Pigułka z odległością. Użyto align-items i shrink-0 dla powstrzymania zgniatania w html2canvas */}
+        <div className="flex justify-end items-center shrink-0 pl-4">
+          <div className="text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-indigo-100 dark:border-indigo-800/50 whitespace-nowrap">
+             <MapPin size={16} className="shrink-0"/> {t.distance}: {match.distance} m
+          </div>
+        </div>
+      </div>
+      
+      <GeminiStory match={match} lang={lang} t={t} />
+
+      {/* Przycisk udostępniania dostępny niezależnie od tego czy użyto AI */}
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-end relative z-10 hide-on-export">
+        <button onClick={handleShare} disabled={isDownloading} className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:scale-105 transition-transform rounded-full font-bold shadow-lg w-full sm:w-auto active:scale-95 disabled:opacity-70 disabled:hover:scale-100">
+           {isDownloading ? <Activity size={16} className="animate-spin" /> : <Share2 size={16} />} 
+           {isDownloading ? t.downloading : t.shareStory}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 
 // ============================================================================
 // GŁÓWNA APLIKACJA REACT
@@ -849,27 +884,34 @@ export default function App() {
                   {results.length > 0 ? <><Sparkles className="text-rose-500"/> {t.foundMatches}</> : t.noMatches}
                 </h2>
                 <div className="space-y-6">
-                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
-                  <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
+                  {/* STYLE CSS - EFEKT PREMIUM PLAKATU DLA WYEKSPORTOWANEGO SHARE CARD */}
+                  <style>{`
+                    .exporting-card .hide-on-export { display: none !important; }
+                    .exporting-card .watermark-only { display: block !important; }
+                    .exporting-card {
+                      background: linear-gradient(150deg, #1e1b4b 0%, #312e81 40%, #701a75 100%) !important;
+                      color: #f8fafc !important;
+                      border-radius: 40px !important;
+                      padding: 80px 50px 140px 50px !important;
+                      border: none !important;
+                      box-shadow: none !important;
+                      display: flex !important;
+                      flex-direction: column !important;
+                      justify-content: center !important;
+                      min-height: 850px !important;
+                    }
+                    .exporting-card .text-rose-500 { color: #fb7185 !important; }
+                    .exporting-card .text-indigo-500, .exporting-card .text-indigo-600, .exporting-card .text-indigo-700 { color: #c7d2fe !important; }
+                    .exporting-card .text-gray-500, .exporting-card .text-gray-600, .exporting-card .text-gray-700, .exporting-card .text-gray-800 { color: #e2e8f0 !important; }
+                    .exporting-card .border-gray-100, .exporting-card .border-b, .exporting-card .border-indigo-100, .exporting-card .border-indigo-200 { border-color: rgba(255,255,255,0.15) !important; }
+                    .exporting-card .bg-indigo-50, .exporting-card .bg-gray-50, .exporting-card .bg-white { background: rgba(255,255,255,0.1) !important; border: 1px solid rgba(255,255,255,0.2) !important; backdrop-filter: blur(10px); }
+                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 40px !important; margin-top: 40px !important; }
+                    .exporting-card .icon-sparkle-bg { opacity: 0.2 !important; color: #fff !important; }
+                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 15px !important; padding-top: 0 !important; }
+                  `}</style>
                   
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
-                    const date = new Date(match.time);
-                    return (
-                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group">
-                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4">
-                          <div>
-                            <div className="text-xl font-extrabold text-rose-500">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
-                            <div className="text-gray-500 dark:text-gray-400 font-medium mt-1">{date.toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' })}</div>
-                          </div>
-                          <div className="text-right">
-                             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-900 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-700">
-                               <MapPin size={14} className="text-indigo-500" /> {match.distance}m
-                             </div>
-                          </div>
-                        </div>
-                        <GeminiStory match={match} lang={lang} t={t} />
-                      </div>
-                    );
+                    return <MatchCard key={i} match={match} lang={lang} t={t} />;
                   })}
                   
                   {results.length > visibleCount && (
@@ -1070,47 +1112,26 @@ export default function App() {
                       background: linear-gradient(150deg, #1e1b4b 0%, #312e81 40%, #701a75 100%) !important;
                       color: #f8fafc !important;
                       border-radius: 40px !important;
-                      padding: 60px 40px 100px 40px !important;
+                      padding: 80px 50px 140px 50px !important;
                       border: none !important;
                       box-shadow: none !important;
+                      display: flex !important;
+                      flex-direction: column !important;
+                      justify-content: center !important;
+                      min-height: 850px !important;
                     }
                     .exporting-card .text-rose-500 { color: #fb7185 !important; }
                     .exporting-card .text-indigo-500, .exporting-card .text-indigo-600, .exporting-card .text-indigo-700 { color: #c7d2fe !important; }
                     .exporting-card .text-gray-500, .exporting-card .text-gray-600, .exporting-card .text-gray-700, .exporting-card .text-gray-800 { color: #e2e8f0 !important; }
                     .exporting-card .border-gray-100, .exporting-card .border-b, .exporting-card .border-indigo-100, .exporting-card .border-indigo-200 { border-color: rgba(255,255,255,0.15) !important; }
                     .exporting-card .bg-indigo-50, .exporting-card .bg-gray-50, .exporting-card .bg-white { background: rgba(255,255,255,0.1) !important; border: 1px solid rgba(255,255,255,0.2) !important; backdrop-filter: blur(10px); }
-                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 32px !important; margin-top: 30px !important; }
+                    .exporting-card .story-content-container { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 40px !important; margin-top: 40px !important; }
                     .exporting-card .icon-sparkle-bg { opacity: 0.2 !important; color: #fff !important; }
-                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 10px !important; padding-top: 0 !important; }
+                    .exporting-card .generated-long-story { border-top: none !important; margin-top: 15px !important; padding-top: 0 !important; }
                   `}</style>
                   
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
-                    const date = new Date(match.time);
-                    return (
-                      <div key={i} id={`story-card-${match.time}`} className="relative bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group">
-                        
-                        {/* Znak wodny, ukryty normalnie, widoczny TYLKO na obrazku udostępnionym na Insta */}
-                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hidden watermark-only"></div>
-                        <div className="absolute bottom-8 left-0 right-0 text-center hidden watermark-only">
-                           <span className="text-white/60 font-black tracking-[0.4em] text-xs drop-shadow-md">📍 HAVEWEMET.APP</span>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4 relative z-10">
-                          <div>
-                            <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 group-hover:text-rose-600 transition-colors">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
-                            <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2">
-                              <span>{date.toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' })}</span>
-                            </div>
-                          </div>
-                          <div className="text-right flex-1 sm:flex-none">
-                            <div className="text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl flex items-center justify-end gap-2 border border-indigo-100 dark:border-indigo-800/50">
-                               <MapPin size={16} /> {t.distance}: {match.distance} m
-                            </div>
-                          </div>
-                        </div>
-                        <GeminiStory match={match} lang={lang} t={t} />
-                      </div>
-                    );
+                    return <MatchCard key={i} match={match} lang={lang} t={t} />;
                   })}
                   
                   {results.length > visibleCount && (

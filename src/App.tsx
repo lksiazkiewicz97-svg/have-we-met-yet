@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CloudUpload, MapPin, Activity, CircleCheck, TriangleAlert, Play, Settings, CircleHelp, X, Trash2, Wand2, Sparkles, QrCode, Link as LinkIcon, Smartphone, Wifi, Lock, ShieldCheck, ArrowRight, HeartHandshake, Moon, Sun, Globe, Download } from 'lucide-react';
 
+// Deklaracja globalnych zmiennych
+declare global {
+  interface Window { L: any; Peer: any; tailwind: any; html2canvas: any; }
+}
+
 // ============================================================================
 // SŁOWNIK JĘZYKÓW (i18n)
 // ============================================================================
@@ -303,16 +308,8 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  // Bezpieczny odczyt z usuwaniem białych znaków (np. spacji) na wypadek błędnego skopiowania
-  const getApiKey = () => {
-    try {
-      const meta = import.meta as any;
-      return (meta.env?.VITE_GEMINI_API_KEY || "").trim();
-    } catch {
-      return "";
-    }
-  };
-  const apiKey = getApiKey();
+  // @ts-ignore - Ignorujemy błąd TypeScript, Vite automatycznie podstawi tu klucz podczas budowania na Cloudflare
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
   const dateStr = new Date(match.time).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
   const timeStr = new Date(match.time).toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' });
@@ -324,7 +321,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
         const res = await fetch(url, options);
         if (!res.ok) {
            const errBody = await res.text();
-           console.error("Gemini API Error:", errBody); // Pokazuje w konsoli dokładną przyczynę, np. złą nazwę modelu
+           console.error("Gemini API Error:", errBody);
            throw new Error(`HTTP error! status: ${res.status}`);
         }
         return await res.json();
@@ -337,10 +334,6 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   const generateShortStory = async () => {
-    if (!apiKey) {
-      setErrorMsg(lang === 'pl' ? "Błąd: Brak klucza API w konfiguracji (VITE_GEMINI_API_KEY)." : "Error: API Key missing in config (VITE_GEMINI_API_KEY).");
-      return;
-    }
     setIsLoadingShort(true);
     setErrorMsg(null);
 
@@ -352,7 +345,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
-      tools: [{ googleSearch: {} }], // Prawidłowa nazwa narzędzia dla oficjalnego API Google
+      tools: [{ googleSearch: {} }],
       systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie fakty geograficzne. Respond in requested language." }] }
     };
 
@@ -508,7 +501,6 @@ export default function App() {
   const [theme, setTheme] = useState<string>('light');
   const t = dict[lang];
 
-  // Silne typowanie stanów Reacta naprawia błędy TypeScript
   const [fileA, setFileA] = useState<any[] | null>(null);
   const [fileB, setFileB] = useState<any[] | null>(null);
   const [errorA, setErrorA] = useState<string | null>(null);
@@ -826,7 +818,7 @@ export default function App() {
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
-                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow group">
                         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4">
                           <div>
                             <div className="text-xl font-extrabold text-rose-500">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>

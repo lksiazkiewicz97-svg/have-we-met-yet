@@ -306,7 +306,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [sources, setSources] = useState<any[]>([]);
 
   // Środowisko testowe wymaga pustego klucza. Przy eksporcie do Netlify przeklej swój klucz z komentarza obok!
-  const apiKey = "AIzaSyAdZNZSShUF1VdvDjkQqpLDkdeGRcj0zGQ"; // TWÓJ KLUCZ DO SKOPIOWANIA: "AIzaSyAdZNZSShUF1VdvDjkQqpLDkdeGRcj0zGQ"
+  const apiKey = ""; // TWÓJ KLUCZ DO SKOPIOWANIA: ""
   const dateStr = new Date(match.time).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
   const timeStr = new Date(match.time).toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' });
 

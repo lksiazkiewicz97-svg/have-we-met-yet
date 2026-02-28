@@ -303,10 +303,16 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  // ZMIANA: Czysty, standardowy odczyt zmiennych dla Vite.
-  // @ts-ignore wycisza problem TypeScripta bez psucia kompilacji w locie.
-  // @ts-ignore
-  const apiKey = import.meta.env?.VITE_GEMINI_API_KEY || "";
+  // Bezpieczny odczyt z usuwaniem białych znaków (np. spacji) na wypadek błędnego skopiowania
+  const getApiKey = () => {
+    try {
+      const meta = import.meta as any;
+      return (meta.env?.VITE_GEMINI_API_KEY || "").trim();
+    } catch {
+      return "";
+    }
+  };
+  const apiKey = getApiKey();
 
   const dateStr = new Date(match.time).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
   const timeStr = new Date(match.time).toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' });
@@ -316,7 +322,11 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     for (let i = 0; i < retries; i++) {
       try {
         const res = await fetch(url, options);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        if (!res.ok) {
+           const errBody = await res.text();
+           console.error("Gemini API Error:", errBody); // Pokazuje w konsoli dokładną przyczynę, np. złą nazwę modelu
+           throw new Error(`HTTP error! status: ${res.status}`);
+        }
         return await res.json();
       } catch (e) {
         if (i === retries - 1) throw e;
@@ -328,7 +338,7 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
 
   const generateShortStory = async () => {
     if (!apiKey) {
-      setErrorMsg(lang === 'pl' ? "Błąd: Brak klucza API w konfiguracji Cloudflare (VITE_GEMINI_API_KEY)." : "Error: API Key missing in Cloudflare config (VITE_GEMINI_API_KEY).");
+      setErrorMsg(lang === 'pl' ? "Błąd: Brak klucza API w konfiguracji (VITE_GEMINI_API_KEY)." : "Error: API Key missing in config (VITE_GEMINI_API_KEY).");
       return;
     }
     setIsLoadingShort(true);
@@ -342,18 +352,19 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
+      tools: [{ googleSearch: {} }], // Prawidłowa nazwa narzędzia dla oficjalnego API Google
       systemInstruction: { parts: [{ text: "Jesteś asystentem podającym krótkie fakty geograficzne. Respond in requested language." }] }
     };
 
     try {
-      const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const data = await fetchWithRetry(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!candidate) throw new Error("No data");
       setShortStory(candidate);
       setSources(data.candidates?.[0]?.groundingMetadata?.groundingAttributions?.map((a: any) => ({ uri: a.web?.uri, title: a.web?.title })).filter((a: any) => a.uri) || []);
     } catch (e) {
-      setErrorMsg(lang === 'pl' ? "Magia AI chwilowo zawiodła (sprawdź klucz API)." : "AI magic failed (check API key).");
+      setErrorMsg(lang === 'pl' ? "Magia AI chwilowo zawiodła (sprawdź konsolę F12)." : "AI magic failed (check F12 console).");
     } finally {
       setIsLoadingShort(false);
     }
@@ -368,12 +379,13 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
     const prompt = `Lat: ${match.lat}, Lon: ${match.lon}. ${promptParams} Znane tło: ${shortStory}.`;
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
+      tools: [{ googleSearch: {} }],
       systemInstruction: { parts: [{ text: "Jesteś narratorem piszącym romantyczne opowieści." }] }
     };
 
     try {
-      const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const data = await fetchWithRetry(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!candidate) throw new Error("No data");
       setLongStory(candidate);
@@ -496,6 +508,7 @@ export default function App() {
   const [theme, setTheme] = useState<string>('light');
   const t = dict[lang];
 
+  // Silne typowanie stanów Reacta naprawia błędy TypeScript
   const [fileA, setFileA] = useState<any[] | null>(null);
   const [fileB, setFileB] = useState<any[] | null>(null);
   const [errorA, setErrorA] = useState<string | null>(null);
@@ -518,9 +531,6 @@ export default function App() {
   const [joinLink, setJoinLink] = useState<string>('');
   const [manualJoinCode, setManualJoinCode] = useState<string>(''); 
   const [copySuccess, setCopySuccess] = useState<boolean>(false); 
-  
-  // ZMIANA: Wyciszamy warning rygorystycznego kompilatora w środowisku zewnętrznym
-  // @ts-ignore
   const [peerError, setPeerError] = useState<string | null>(null);
   
   const [peerConnection, setPeerConnection] = useState<any>(null);

@@ -285,8 +285,8 @@ const MapView = ({ matches }: { matches: any[] }) => {
 
   if (!matches || matches.length === 0) return null;
   return (
-    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 shadow-sm relative z-0">
-      <div ref={mapRef} className="w-full h-[400px] bg-gray-50" />
+    <div className="mt-8 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm relative z-0">
+      <div ref={mapRef} className="w-full h-[400px] bg-gray-50 dark:bg-gray-800" />
     </div>
   );
 };
@@ -303,17 +303,10 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  // BEZPIECZNE POBIERANIE KLUCZA: Brak fallbacku w kodzie.
-  const getApiKey = () => {
-    try {
-      const meta = import.meta as any;
-      // Vite automatycznie wstawi tutaj wartość podczas budowania na Cloudflare
-      return meta.env?.VITE_GEMINI_API_KEY || "";
-    } catch {
-      return "";
-    }
-  };
-  const apiKey = getApiKey();
+  // ZMIANA: Czysty, standardowy odczyt zmiennych dla Vite.
+  // @ts-ignore wycisza problem TypeScripta bez psucia kompilacji w locie.
+  // @ts-ignore
+  const apiKey = import.meta.env?.VITE_GEMINI_API_KEY || "";
 
   const dateStr = new Date(match.time).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US');
   const timeStr = new Date(match.time).toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' });
@@ -423,37 +416,35 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
   };
 
   return (
-    <div className="mt-5 border-t border-gray-100 pt-5">
+    <div className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-5">
       {!shortStory && !isLoadingShort && (
-        <button onClick={generateShortStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-full transition-colors border border-indigo-200 font-medium w-full sm:w-auto justify-center group hide-on-export">
+        <button onClick={generateShortStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full transition-colors border border-indigo-200 dark:border-indigo-800/50 font-medium w-full sm:w-auto justify-center group hide-on-export">
           <Sparkles size={16} className="text-indigo-500 group-hover:animate-spin" />
           {t.aiShortBtn}
         </button>
       )}
 
       {isLoadingShort && (
-        <div className="flex items-center gap-2 text-sm text-indigo-600 animate-pulse bg-indigo-50/50 p-4 rounded-2xl font-medium w-fit hide-on-export">
+        <div className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400 animate-pulse bg-indigo-50/50 dark:bg-indigo-900/20 p-4 rounded-2xl font-medium w-fit hide-on-export">
           <Activity size={16} className="animate-spin" /> {t.aiLocating}
         </div>
       )}
 
       {errorMsg && (
-         <div className="text-sm text-red-500 mt-2 flex items-center gap-1 font-medium hide-on-export">
-            <TriangleAlert size={14}/> {errorMsg}
-         </div>
+         <div className="text-sm text-red-500 mt-2 flex items-center gap-1 font-medium hide-on-export"><TriangleAlert size={14}/> {errorMsg}</div>
       )}
 
       {shortStory && (
-        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-5 rounded-2xl border border-indigo-100/50 shadow-sm relative overflow-hidden">
+        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-5 rounded-2xl border border-indigo-100/50 dark:border-indigo-800/30 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Sparkles size={64} /></div>
-          <div className="flex items-center gap-2 mb-3 text-indigo-800 font-bold text-sm relative z-10">
-            <MapPin size={16} className="text-indigo-600" /> {t.aiMapPoint}
+          <div className="flex items-center gap-2 mb-3 text-indigo-800 dark:text-indigo-300 font-bold text-sm relative z-10">
+            <MapPin size={16} className="text-indigo-600 dark:text-indigo-400" /> {t.aiMapPoint}
           </div>
-          <p className="text-sm text-gray-800 font-medium line-relaxed relative z-10">{shortStory}</p>
+          <p className="text-sm text-gray-800 dark:text-gray-200 font-medium leading-relaxed relative z-10">{shortStory}</p>
           
           {!longStory && !isLoadingLong && (
-             <div className="mt-5 pt-4 border-t border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10 hide-on-export">
-                <span className="text-xs text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
+             <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10 hide-on-export">
+                <span className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                   <Lock size={12} className="text-amber-500" /> {t.aiPremiumLock}
                 </span>
                 <button onClick={generateLongStory} className="flex items-center gap-2 text-sm px-5 py-2.5 bg-gradient-to-r from-rose-400 to-pink-500 hover:from-rose-500 hover:to-pink-600 text-white rounded-full transition-all shadow-md font-bold w-full sm:w-auto justify-center group hover:scale-[1.02] active:scale-95">
@@ -462,19 +453,19 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
              </div>
           )}
           {isLoadingLong && (
-            <div className="mt-5 pt-4 border-t border-indigo-100 flex flex-col gap-2 text-sm text-rose-500 animate-pulse font-bold relative z-10 hide-on-export">
+            <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-800/50 flex flex-col gap-2 text-sm text-rose-500 dark:text-rose-400 animate-pulse font-bold relative z-10 hide-on-export">
               <div className="flex items-center gap-2"><Sparkles size={16} /> {t.aiGenerating}</div>
             </div>
           )}
           {longStory && (
-            <div className="mt-5 pt-5 border-t border-indigo-200 animate-fade-in relative z-10">
-              <div className="flex items-center gap-2 mb-3 text-rose-600 font-bold text-sm">
+            <div className="mt-5 pt-5 border-t border-indigo-200 dark:border-indigo-800/50 animate-fade-in relative z-10">
+              <div className="flex items-center gap-2 mb-3 text-rose-600 dark:text-rose-400 font-bold text-sm">
                 <Sparkles size={16} /> {t.aiStoryTitle}
               </div>
-              <p className="text-sm text-gray-700 leading-relaxed italic">"{longStory}"</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic">"{longStory}"</p>
               
               <div className="mt-6 flex justify-end hide-on-export">
-                <button onClick={handleShare} disabled={isDownloading} className="flex items-center gap-2 text-xs px-5 py-2.5 bg-gray-900 text-white hover:scale-105 transition-transform rounded-full font-bold shadow-lg">
+                <button onClick={handleShare} disabled={isDownloading} className="flex items-center gap-2 text-xs px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:scale-105 transition-transform rounded-full font-bold shadow-lg">
                    {isDownloading ? <Activity size={14} className="animate-spin" /> : <Download size={14} />} 
                    {isDownloading ? t.downloading : t.shareStory}
                 </button>
@@ -482,11 +473,11 @@ const GeminiStory = ({ match, lang, t }: { match: any, lang: string, t: any }) =
             </div>
           )}
           {sources.length > 0 && (
-            <div className="mt-5 pt-3 border-t border-indigo-200/50 text-xs text-gray-500 flex flex-col gap-2 relative z-10 hide-on-export">
-              <span className="font-semibold text-gray-600">{t.aiSources}</span>
+            <div className="mt-5 pt-3 border-t border-indigo-200/50 dark:border-indigo-800/50 text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-2 relative z-10 hide-on-export">
+              <span className="font-semibold text-gray-600 dark:text-gray-300">{t.aiSources}</span>
               <div className="flex flex-wrap gap-2">
                 {sources.slice(0, 3).map((s: any, idx: number) => (
-                  <a key={idx} href={s.uri} target="_blank" rel="noreferrer" className="bg-white px-2 py-1 rounded-md text-indigo-600 hover:text-indigo-800 shadow-sm border border-indigo-100 hover:underline inline-block truncate max-w-[250px]" title={s.title}>🔗 {s.title || "Link"}</a>
+                  <a key={idx} href={s.uri} target="_blank" rel="noreferrer" className="bg-white dark:bg-gray-800 px-2 py-1 rounded-md text-indigo-600 dark:text-indigo-400 shadow-sm border border-indigo-100 dark:border-gray-700 hover:underline inline-block truncate max-w-[250px]" title={s.title}>🔗 {s.title || "Link"}</a>
                 ))}
               </div>
             </div>
@@ -505,7 +496,6 @@ export default function App() {
   const [theme, setTheme] = useState<string>('light');
   const t = dict[lang];
 
-  // Silne typowanie stanów Reacta naprawia błędy TypeScript
   const [fileA, setFileA] = useState<any[] | null>(null);
   const [fileB, setFileB] = useState<any[] | null>(null);
   const [errorA, setErrorA] = useState<string | null>(null);
@@ -528,6 +518,9 @@ export default function App() {
   const [joinLink, setJoinLink] = useState<string>('');
   const [manualJoinCode, setManualJoinCode] = useState<string>(''); 
   const [copySuccess, setCopySuccess] = useState<boolean>(false); 
+  
+  // ZMIANA: Wyciszamy warning rygorystycznego kompilatora w środowisku zewnętrznym
+  // @ts-ignore
   const [peerError, setPeerError] = useState<string | null>(null);
   
   const [peerConnection, setPeerConnection] = useState<any>(null);
@@ -535,8 +528,11 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -627,9 +623,9 @@ export default function App() {
       const id = await initPeerJS();
       setPeerId(id);
       let base = window.location.href;
-      if (base === 'about:srcdoc' || base.startsWith('data:')) base = 'https://have-we-met-yet.pages.dev/'; 
+      if (base === 'about:srcdoc' || base.startsWith('data:')) base = 'https://czysieznamy.pl/'; 
       try { const url = new URL(base); url.searchParams.set('join', id); setJoinLink(url.toString()); } 
-      catch (e) { setJoinLink(`https://have-we-met-yet.pages.dev/?join=${id}`); }
+      catch (e) { setJoinLink(`https://czysieznamy.pl/?join=${id}`); }
 
       peerInstance.current?.on('connection', (conn: any) => {
         setPeerConnection(conn); setPeerStatus('connected');
@@ -718,6 +714,7 @@ export default function App() {
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
   const toggleLang = () => setLang(lang === 'pl' ? 'en' : 'pl');
 
+  // WSPÓLNE RENDEROWANIE TOP BAR
   const TopBar = () => (
     <div className="absolute top-4 right-4 flex gap-3 z-50">
       <button onClick={toggleLang} className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:scale-105 transition-all flex items-center justify-center font-bold text-xs uppercase w-10 h-10">
@@ -736,6 +733,7 @@ export default function App() {
         <TopBar />
 
         {isGuestMode ? (
+          // ================= RENDEROWANIE: TRYB GOŚCIA =================
           <>
             <div className="absolute top-6 left-6 hidden sm:block">
               <div className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-100 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300">
@@ -754,14 +752,24 @@ export default function App() {
               </button>
             </div>
 
+            {peerError && (
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl text-red-700 dark:text-red-400 flex items-center gap-3 w-full max-w-md shadow-sm animate-fade-in">
+                <TriangleAlert size={24} className="shrink-0 text-red-500" />
+                <div className="text-sm">
+                  <p className="font-bold">{t.peerErrorTitle}</p>
+                  <p>{peerError}</p>
+                </div>
+              </div>
+            )}
+
             <div className={`w-full max-w-md p-10 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-xl ${fileA ? 'bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-100 dark:border-emerald-800' : errorA ? 'bg-red-50 dark:bg-red-900/20 border-2 border-red-100 dark:border-red-800' : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700'}`}>
               {fileA ? (
                 <div className="text-center w-full animate-fade-in">
                   <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
                     <CircleCheck className="text-emerald-600 dark:text-emerald-400 w-10 h-10" />
                   </div>
-                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">Gotowe!</h3>
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">Wczytano {fileA.length.toLocaleString('pl-PL')} punktów.</p>
+                  <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.readyHost}</h3>
+                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-6 font-medium">{t.readyPts.replace('{n}', fileA.length.toLocaleString('pl-PL'))}</p>
                   
                   <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-emerald-50 dark:border-emerald-900/30">
                     {peerStatus === 'connected' && !results ? (
@@ -786,18 +794,25 @@ export default function App() {
                   </div>
                   <h3 className="font-bold text-xl mb-2">{t.uploadYourHistory}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">{t.usuallyFile} <code className="bg-gray-100 dark:bg-gray-900 px-1.5 py-0.5 rounded text-indigo-600 dark:text-indigo-400 font-mono text-xs">Records.json</code></p>
-                  <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="relative text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-gray-700 file:text-white hover:file:bg-gray-800 w-full cursor-pointer bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm" />
+                  
+                  <div className="relative w-full group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-rose-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
+                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="relative text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-gray-700 file:text-white hover:file:bg-gray-800 dark:hover:file:bg-gray-600 w-full cursor-pointer bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm" />
+                  </div>
                   {errorA && (<div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-2xl text-sm text-red-700 dark:text-red-400 flex items-start gap-3 w-full"><TriangleAlert size={20} className="shrink-0" /><span>{errorA}</span></div>)}
                 </div>
               )}
             </div>
+
             {results && (
               <div className="w-full max-w-3xl mt-12 animate-fade-in">
                 <h2 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 mb-8 flex items-center justify-center gap-3">
                   {results.length > 0 ? <><Sparkles className="text-rose-500"/> {t.foundMatches}</> : t.noMatches}
                 </h2>
                 <div className="space-y-6">
+                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
                   <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
+                  
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
@@ -817,6 +832,7 @@ export default function App() {
                       </div>
                     );
                   })}
+                  
                   {results.length > visibleCount && (
                     <div className="text-center pt-6">
                       <button onClick={() => setVisibleCount(v => v + 5)} className="px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full font-bold text-sm transition-colors border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -830,23 +846,38 @@ export default function App() {
             )}
           </>
         ) : (
+          // ================= RENDEROWANIE: TRYB HOSTA =================
           <>
             <div className="mt-2 mb-8 animate-fade-in hidden sm:block">
               <div className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-200 dark:border-gray-700 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
                 <ShieldCheck size={18} className="text-emerald-500" /> {t.secureBadge}
               </div>
             </div>
+
             <div className="text-center max-w-3xl mb-12">
               <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight flex items-center justify-center gap-3 sm:gap-4 mb-4">
                 <MapPin size={48} className="text-rose-500 hidden sm:block" /> {t.title}
               </h1>
-              <p className="text-lg sm:text-xl text-gray-500 dark:text-gray-400 leading-relaxed font-medium">{t.subtitle}</p>
+              <p className="text-lg sm:text-xl text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                {t.subtitle}
+              </p>
               <button onClick={() => setShowInstructions(true)} className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-full text-sm font-bold shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:scale-105 active:scale-95">
                 <CircleHelp size={18} className="text-indigo-500" /> {t.howToData}
               </button>
             </div>
 
+            {peerError && (
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl text-red-700 dark:text-red-400 flex items-center gap-3 w-full max-w-5xl shadow-sm animate-fade-in">
+                <TriangleAlert size={24} className="shrink-0 text-red-500" />
+                <div className="text-sm">
+                  <p className="font-bold">{t.peerErrorTitle}</p>
+                  <p>{peerError}</p>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col lg:flex-row gap-8 w-full max-w-5xl mb-12">
+              {/* Osoba A */}
               <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 ${fileA ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : errorA ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500'}`}>
                 {fileA ? (
                   <div className="text-center w-full animate-fade-in">
@@ -860,12 +891,18 @@ export default function App() {
                     <div className="bg-indigo-50 dark:bg-indigo-900/30 w-20 h-20 rounded-full flex items-center justify-center mb-6"><CloudUpload className={`w-10 h-10 ${errorA ? 'text-red-500' : 'text-indigo-600 dark:text-indigo-400'}`} /></div>
                     <h3 className="font-bold text-2xl mb-2">{t.hostTitle}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8 font-medium">{t.hostDesc}</p>
-                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-gray-700 file:text-white hover:file:bg-gray-800 w-full cursor-pointer bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm" />
+                    <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileA, setErrorA)} className="text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-900 dark:file:bg-gray-700 file:text-white hover:file:bg-gray-800 dark:hover:file:bg-gray-600 w-full max-w-[280px] cursor-pointer bg-gray-50 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm" />
                     {errorA && (<div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-2xl text-sm text-red-700 dark:text-red-400 flex items-start gap-3 max-w-xs text-left"><TriangleAlert size={20} className="shrink-0 mt-0.5" /><span>{errorA}</span></div>)}
                   </div>
                 )}
               </div>
-              <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 overflow-hidden ${peerStatus === 'hosting' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' : peerStatus === 'connected' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : fileB ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300'}`}>
+
+              {/* Osoba B */}
+              <div className={`flex-1 p-8 rounded-[2rem] flex flex-col items-center justify-center transition-all duration-300 relative shadow-sm border-2 overflow-hidden ${
+                peerStatus === 'hosting' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' : 
+                peerStatus === 'connected' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 
+                fileB ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-gray-800 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300'
+              }`}>
                 {peerStatus === 'hosting' ? (
                    <div className="text-center w-full animate-fade-in flex flex-col items-center">
                      <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><X size={20} /></button>
@@ -887,19 +924,15 @@ export default function App() {
                    </div>
                 ) : peerStatus === 'connected' && fileB ? (
                    <div className="text-center w-full animate-fade-in">
-                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm" title="Zakończ sesję"><Trash2 size={20} /></button>
-                     <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
-                       <Smartphone className="text-emerald-600 dark:text-emerald-400 w-10 h-10" />
-                     </div>
+                     <button onClick={cancelHosting} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
+                     <div className="bg-emerald-100 dark:bg-emerald-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"><Smartphone className="text-emerald-600 dark:text-emerald-400 w-10 h-10" /></div>
                      <h3 className="font-bold text-2xl text-emerald-800 dark:text-emerald-300 mb-2">{t.guestJoined}</h3>
                      <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">{t.guestJoinedDesc.replace('{n}', fileB.length.toLocaleString('pl-PL'))}</p>
                    </div>
                 ) : fileB ? (
                    <div className="text-center w-full animate-fade-in">
                      <button onClick={() => clearFile('B')} className="absolute top-5 right-5 text-gray-400 hover:text-red-500 bg-white dark:bg-gray-700 p-2 rounded-full shadow-sm"><Trash2 size={20} /></button>
-                     <div className="bg-rose-100 dark:bg-rose-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
-                       <CircleCheck className="text-rose-600 dark:text-rose-400 w-10 h-10" />
-                     </div>
+                     <div className="bg-rose-100 dark:bg-rose-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"><CircleCheck className="text-rose-600 dark:text-rose-400 w-10 h-10" /></div>
                      <h3 className="font-bold text-2xl text-rose-800 dark:text-rose-300 mb-2">{t.guestReadyManual}</h3>
                      <p className="text-sm font-medium text-rose-600 dark:text-rose-400 mt-1">{t.guestManualDesc.replace('{n}', fileB.length.toLocaleString('pl-PL'))}</p>
                    </div>
@@ -915,7 +948,7 @@ export default function App() {
                         <button onClick={handleManualJoin} disabled={!manualJoinCode.trim()} className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-3 rounded-full text-sm font-bold shadow-sm"><ArrowRight size={18} /></button>
                     </div>
                     <div className="relative flex items-center py-2 w-full max-w-[280px] opacity-60">
-                      <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div><span className="flex-shrink-0 mx-4 text-gray-400 text-xs font-bold uppercase tracking-widest">{t.orTraditionally}</span><div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
+                      <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div><span className="flex-shrink-0 mx-4 text-xs font-bold uppercase tracking-widest">{t.orTraditionally}</span><div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
                     </div>
                     <input type="file" accept=".json" onChange={(e) => handleFileUpload(e, setFileB, setErrorB)} className="text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-gray-100 dark:file:bg-gray-800 file:text-gray-700 dark:file:text-gray-300 hover:file:bg-gray-200 w-full max-w-[280px] mt-4 cursor-pointer text-gray-500 transition-all" />
                     {errorB && (<div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl text-xs text-red-700 flex items-start gap-2 max-w-[280px] text-left"><TriangleAlert size={16} className="shrink-0 text-red-500" /><span>{errorB}</span></div>)}
@@ -932,6 +965,8 @@ export default function App() {
             <div className="w-full max-w-5xl bg-white dark:bg-gray-800 rounded-[2rem] p-8 sm:p-10 border border-gray-200 dark:border-gray-700 mb-12 shadow-sm">
               <div className="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-8">
                 <h3 className="text-xl font-extrabold flex items-center gap-3"><Settings size={24} className="text-indigo-500" /> {t.searchParams}</h3>
+                
+                {/* PRESETY */}
                 <div className="hidden md:flex gap-2">
                    <button onClick={() => applyPreset(50, 60)} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">{t.presetParty}</button>
                    <button onClick={() => applyPreset(500, 180)} className="text-xs font-bold bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-3 py-1.5 rounded-lg hover:bg-purple-100 transition-colors">{t.presetFest}</button>
@@ -955,10 +990,16 @@ export default function App() {
                   <input type="range" min="1" max="1440" step="1" value={maxTimeDiff} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxTimeDiff(parseInt(e.target.value))} className="w-full h-2 bg-gray-300 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-rose-500" />
                 </div>
               </div>
+              
+              <div className="md:hidden flex flex-wrap justify-center gap-2 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+                 <button onClick={() => applyPreset(50, 60)} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 px-3 py-1.5 rounded-lg">{t.presetParty}</button>
+                 <button onClick={() => applyPreset(500, 180)} className="text-xs font-bold bg-purple-50 dark:bg-purple-900/30 text-purple-700 px-3 py-1.5 rounded-lg">{t.presetFest}</button>
+                 <button onClick={() => applyPreset(5000, 720)} className="text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-700 px-3 py-1.5 rounded-lg">{t.presetCity}</button>
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 mb-16 w-full max-w-sm justify-center">
-              <button onClick={startAnalysis} disabled={!fileA || !fileB || isProcessing} className="w-full py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold text-lg shadow-xl transition-all disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-1">
+              <button onClick={startAnalysis} disabled={!fileA || !fileB || isProcessing} className="w-full py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold text-lg shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-1">
                 {isProcessing ? <Activity className="animate-spin" size={24} /> : <Play fill="currentColor" size={20} />} 
                 {isProcessing ? t.analyzingBtn : t.analyzeBtn}
               </button>
@@ -979,27 +1020,34 @@ export default function App() {
                 <h2 className="text-3xl sm:text-4xl font-extrabold mb-10 flex items-center gap-4 relative z-10">
                   {results.length > 0 ? <><Sparkles className="text-rose-500" size={36} /> {t.foundMatches}</> : t.noMatches}
                 </h2>
+                
+                {/* PAGINACJA WYNIKÓW */}
                 <div className="space-y-6 relative z-10">
+                  {/* STYLE CSS TYLKO NA CZAS EKSPORTU */}
                   <style>{`.exporting-card .hide-on-export { display: none !important; } .exporting-card { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%) !important; color: #111827 !important; border-radius: 40px !important; padding: 48px !important; box-shadow: none !important; border: none !important; } .dark .exporting-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; color: #f9fafb !important; border: none !important; }`}</style>
+                  
                   {results.slice(0, visibleCount).map((match: any, i: number) => {
                     const date = new Date(match.time);
                     return (
-                      <div key={i} id={`story-card-${match.time}`} className="bg-white dark:bg-gray-800 p-6 rounded-3xl flex flex-col gap-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4">
+                      <div key={i} id={`story-card-${match.time}`} className="bg-gray-50 dark:bg-gray-900 p-6 sm:p-8 rounded-3xl flex flex-col gap-4 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow group">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
                           <div>
-                            <div className="text-xl font-extrabold text-rose-500">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
-                            <div className="text-gray-500 dark:text-gray-400 font-medium mt-1">{date.toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' })}</div>
+                            <div className="text-2xl font-black text-rose-500 tracking-tight mb-1 group-hover:text-rose-600 transition-colors">{date.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US')}</div>
+                            <div className="text-gray-500 dark:text-gray-400 font-medium text-sm flex items-center gap-2">
+                              <span>{date.toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-US', { hour: '2-digit', minute:'2-digit' })}</span>
+                            </div>
                           </div>
-                          <div className="text-right">
-                             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-900 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-700">
-                               <MapPin size={14} className="text-indigo-500" /> {match.distance}m
-                             </div>
+                          <div className="text-right flex-1 sm:flex-none">
+                            <div className="text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl flex items-center justify-end gap-2 border border-indigo-100 dark:border-indigo-800/50">
+                               <MapPin size={16} /> {t.distance}: {match.distance} m
+                            </div>
                           </div>
                         </div>
                         <GeminiStory match={match} lang={lang} t={t} />
                       </div>
                     );
                   })}
+                  
                   {results.length > visibleCount && (
                     <div className="text-center pt-6">
                       <button onClick={() => setVisibleCount(v => v + 5)} className="px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full font-bold text-sm transition-colors border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -1014,6 +1062,7 @@ export default function App() {
           </>
         )}
 
+        {/* MODAL INSTRUKCJI - WSPÓLNY DLA OBU WIDOKÓW */}
         {showInstructions && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md overflow-y-auto animate-fade-in">
             <div className="bg-white dark:bg-gray-800 rounded-[2rem] p-8 max-w-3xl w-full shadow-2xl relative my-8 border border-gray-100 dark:border-gray-700">
@@ -1021,7 +1070,10 @@ export default function App() {
               <h2 className="text-3xl font-extrabold mb-4 flex items-center gap-3 text-gray-900 dark:text-gray-100">
                 <CircleHelp size={32} className="text-indigo-500" /> {t.howToData}
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 text-base mb-8 font-medium leading-relaxed">{t.instructionModalDesc}</p>
+              <p className="text-gray-600 dark:text-gray-400 text-base mb-8 font-medium leading-relaxed">
+                {t.instructionModalDesc}
+              </p>
+              
               <div className="space-y-6">
                 <div className="bg-indigo-50/50 dark:bg-indigo-900/20 p-6 rounded-3xl border border-indigo-100 dark:border-indigo-800/50">
                   <h3 className="font-extrabold text-indigo-900 dark:text-indigo-300 mb-4 flex items-center gap-2 text-xl">
@@ -1037,12 +1089,16 @@ export default function App() {
                   </ol>
                 </div>
               </div>
+              
               <div className="mt-10 text-center">
-                <button onClick={() => setShowInstructions(false)} className="px-10 py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">{t.gotIt}</button>
+                <button onClick={() => setShowInstructions(false)} className="px-10 py-4 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-full font-extrabold shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">
+                  {t.gotIt}
+                </button>
               </div>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
